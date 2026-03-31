@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
+from core import data_parser
 
 def render():
     st.title("Material Library Database")
-    st.markdown("This view renders the central materials library currently loaded from **Google Sheets**. "
-                "If it fails to connect, it falls back to Mock Data automatically.")
+    st.markdown("This view renders the central materials library currently loaded from **Google Sheets**.")
     
     if 'material_library' in st.session_state:
         # We use a copy to compare after editing
@@ -19,10 +19,23 @@ def render():
                     {"Brand": "Rogers", "Type/Code": "4350B", "Category": "Core", "Er": 3.48, "Df": 0.0037, "Available_Thicknesses": "[0.254, 0.508, 0.762]"},
                     {"Brand": "Generic Copper", "Type/Code": "1oz", "Category": "Copper Foil", "Er": None, "Df": None, "Available_Thicknesses": "[0.035]"}
                 ]
-                st.session_state['material_library'] = pd.DataFrame(mock_data)
-                st.rerun()
+                mock_df = pd.DataFrame(mock_data)
+                # Explicitly push to Cloud during initialization
+                if data_parser.save_material_library_to_cloud(mock_df):
+                    st.session_state['material_library'] = mock_df
+                    st.toast("✅ Sample Library synchronized to Cloud!")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to initialize Cloud database. Check your connection/secrets.")
         
-        st.caption(f"📊 Material Database ({len(original_df)} entries)")
+        c1, c2 = st.columns([4, 1])
+        with c1:
+             st.caption(f"📊 Material Database ({len(original_df)} entries)")
+        with c2:
+             # Manual override if auto-sync is unclear
+             if not original_df.empty and st.button("🔌 Force Sync", type="secondary", use_container_width=True):
+                 if data_parser.save_material_library_to_cloud(original_df):
+                     st.toast("✅ Force sync successful!")
         
         # INTERACTIVE DATA EDITOR
         edited_df = st.data_editor(
@@ -36,7 +49,6 @@ def render():
         # AUTOMATIC SAVE LOGIC
         # If the edited dataframe is different from the one in session state, sync to cloud.
         if not edited_df.equals(original_df):
-            from core import data_parser
             with st.status("🔄 Sincronizzazione automatica database...", expanded=False) as status:
                 success = data_parser.save_material_library_to_cloud(edited_df)
                 if success:
