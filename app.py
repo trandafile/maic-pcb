@@ -75,11 +75,12 @@ def build_sidebar():
     """Create the sidebar with UI toggles."""
     st.sidebar.title("Visualizer Controls")
     
-    # User Session Information
-    username = st.session_state.get('user_name', 'Unknown')
-    st.sidebar.write(f"Logged in as: **{username}**")
-    if st.sidebar.button("Logout", type="secondary"):
-        auth.logout()
+    # User Session Information (Native Auth)
+    if st.user.is_logged_in:
+        username = st.user.name if st.user.name else st.user.email
+        st.sidebar.write(f"Logged in as: **{username}**")
+        if st.sidebar.button("Logout", type="secondary"):
+            auth.logout()
         
     st.sidebar.divider()
     
