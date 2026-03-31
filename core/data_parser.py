@@ -6,29 +6,8 @@ import json
 from google.oauth2.credentials import Credentials
 
 SHEET_ID = "1gX-RaYRxpPgClUkKnBqvoUVKW3cZBaheQpYvh1uFoKA"
-
-@st.cache_data(ttl=600, show_spinner="Connecting to Centralized Database...")
-def get_cloud_library_via_service_account():
-    """
-    Downloads the sheet using the fixed bot credentials (Service Account).
-    """
-    try:
-        # 1. Use the Service Account credentials
-        client = gspread.service_account(filename='credenziali-bot.json')
-        doc = client.open_by_key(SHEET_ID)
-        sheet = doc.sheet1
-        data = sheet.get_all_records()
-        if data:
-            return pd.DataFrame(data)
-    except Exception as e:
-        # Show exact bot email for easier troubleshooting
-        bot_email = "bot-hipa-privato@hipa-489107.iam.gserviceaccount.com"
-        st.error(f"🚨 **Material Database Access Error**  \n"
-                 f"The app could not connect to the Google Sheet.  \n"
-                 f"Please ensure you have shared the sheet with the following email:  \n"
-                 f"`{bot_email}`  \n"
-                 f"Error detail: {e}")
-        return None
+MATERIAL_SHEET = "MaterialLibrary"
+PROJECT_SHEET = "SavedProjects"
 
 def get_gspread_client():
     """Returns a gspread client using Secrets (Cloud) or local JSON (Dev)."""
@@ -57,45 +36,52 @@ def get_gspread_client():
     # If still here, we failed. Raise a helpful exception.
     raise FileNotFoundError("Google Credentials NOT found. Please add 'GOOGLE_SERVICE_ACCOUNT_JSON' to your Streamlit Cloud Secrets.")
 
+def get_or_create_worksheet(doc, title, rows="100", cols="20"):
+    """Helper to get a worksheet or create it if not found."""
+    try:
+        return doc.worksheet(title)
+    except gspread.WorksheetNotFound:
+        return doc.add_worksheet(title=title, rows=rows, cols=cols)
+
 def get_cloud_library_via_service_account():
-    """Fetches full library using the service account helper."""
+    """Fetches full library using the dedicated MaterialLibrary tab."""
     try:
         client = get_gspread_client()
         doc = client.open_by_key(SHEET_ID)
-        sheet = doc.sheet1
-        data = sheet.get_all_records()
+        
+        # Fallback logic: check MaterialLibrary, else try sheet1 to migrate
+        try:
+            ws = doc.worksheet(MATERIAL_SHEET)
+        except gspread.WorksheetNotFound:
+            ws = doc.sheet1 # Temporary fallback for first load
+            
+        data = ws.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
         st.error(f"🚨 Library Fetch Error: {e}")
         return None
 
 def get_material_library():
-    """
-    Returns the Material Library exclusively from Google Sheets.
-    No local Excel fallback or Mock data permitted.
-    """
+    """Returns the Material Library exclusively from Google Sheets."""
     df = get_cloud_library_via_service_account()
-    
     if df is not None:
         return df
-    
-    # If we reached here, loading failed. Return empty DF to block logical errors.
     return pd.DataFrame()
+
 def save_stackup_to_cloud(project_name, stackup_data):
-    """Saves or updates a project state in the 'SavedProjects' tab."""
+    """Saves or updates a project state in the dedicated 'SavedProjects' tab."""
     try:
         import datetime
         client = get_gspread_client()
         doc = client.open_by_key(SHEET_ID)
         
-        try:
-            ws = doc.worksheet("SavedProjects")
-        except gspread.WorksheetNotFound:
-            ws = doc.add_worksheet(title="SavedProjects", rows="100", cols="5")
-            ws.append_row(["Timestamp", "ProjectName", "Project_JSON"])
-            
+        ws = get_or_create_worksheet(doc, PROJECT_SHEET, rows="1000", cols="5")
         all_data = ws.get_all_values()
         
+        if not all_data: # If new sheet, add headers
+            ws.append_row(["Timestamp", "ProjectName", "Project_JSON"])
+            all_data = [["Timestamp", "ProjectName", "Project_JSON"]]
+            
         # Clean data: Replace NaN values with None for JSON compliance
         def clean_nans(obj):
             if isinstance(obj, float) and pd.isna(obj):
@@ -131,18 +117,18 @@ def get_project_list():
     try:
         client = get_gspread_client()
         doc = client.open_by_key(SHEET_ID)
-        ws = doc.worksheet("SavedProjects")
+        ws = get_or_create_worksheet(doc, PROJECT_SHEET)
         data = ws.get_all_values()
         return [row[1] for i, row in enumerate(data) if i > 0]
     except:
         return []
 
 def load_project_from_cloud(project_name):
-    """Loads a specific project by name."""
+    """Loads a specific project by name from the PROJECTS tab."""
     try:
         client = get_gspread_client()
         doc = client.open_by_key(SHEET_ID)
-        ws = doc.worksheet("SavedProjects")
+        ws = get_or_create_worksheet(doc, PROJECT_SHEET)
         data = ws.get_all_values()
         for i, row in enumerate(data):
             if i > 0 and row[1] == project_name:
@@ -152,11 +138,11 @@ def load_project_from_cloud(project_name):
     return None
 
 def delete_project_from_cloud(project_name):
-    """Removes a project row from the Cloud."""
+    """Removes a project row from the PROJECTS tab."""
     try:
         client = get_gspread_client()
         doc = client.open_by_key(SHEET_ID)
-        ws = doc.worksheet("SavedProjects")
+        ws = get_or_create_worksheet(doc, PROJECT_SHEET)
         data = ws.get_all_values()
         for i, row in enumerate(data):
             if i > 0 and row[1] == project_name:
@@ -167,19 +153,21 @@ def delete_project_from_cloud(project_name):
     return False
 
 def save_material_library_to_cloud(df):
-    """Overwrites the main material library sheet with current session state."""
+    """Overwrites the dedicated MaterialLibrary sheet with current session state."""
     try:
         client = get_gspread_client()
         doc = client.open_by_key(SHEET_ID)
-        sheet = doc.sheet1
-        sheet.clear()
         
-        # Replace NaN/None with empty strings to ensure JSON compliance for gspread
+        # Explicitly use or create the MaterialLibrary sheet
+        ws = get_or_create_worksheet(doc, MATERIAL_SHEET, rows="500", cols="10")
+        ws.clear()
+        
+        # Replace NaN/None with empty strings
         clean_df = df.fillna("")
         
         # Prepare data for update: [header] + [rows]
         data_to_send = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
-        sheet.update(data_to_send)
+        ws.update(data_to_send)
         return True
     except Exception as e:
         st.error(f"🚨 Library Sync Error: {e}")
