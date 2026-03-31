@@ -95,7 +95,19 @@ def save_stackup_to_cloud(project_name, stackup_data):
             ws.append_row(["Timestamp", "ProjectName", "Project_JSON"])
             
         all_data = ws.get_all_values()
-        project_json = json.dumps(stackup_data)
+        
+        # Clean data: Replace NaN values with None for JSON compliance
+        def clean_nans(obj):
+            if isinstance(obj, float) and pd.isna(obj):
+                return None
+            elif isinstance(obj, dict):
+                return {k: clean_nans(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [clean_nans(v) for v in obj]
+            return obj
+            
+        clean_stackup = clean_nans(stackup_data)
+        project_json = json.dumps(clean_stackup)
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Check if project exists for Update vs Append
@@ -161,7 +173,13 @@ def save_material_library_to_cloud(df):
         doc = client.open_by_key(SHEET_ID)
         sheet = doc.sheet1
         sheet.clear()
-        sheet.update([df.columns.values.tolist()] + df.values.tolist())
+        
+        # Replace NaN/None with empty strings to ensure JSON compliance for gspread
+        clean_df = df.fillna("")
+        
+        # Prepare data for update: [header] + [rows]
+        data_to_send = [clean_df.columns.values.tolist()] + clean_df.values.tolist()
+        sheet.update(data_to_send)
         return True
     except Exception as e:
         st.error(f"🚨 Library Sync Error: {e}")
