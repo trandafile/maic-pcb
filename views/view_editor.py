@@ -47,10 +47,12 @@ def render():
     filtered_db = df_lib[df_lib['Category'].isin(valid_lib_cats)] if not df_lib.empty else pd.DataFrame()
     
     # Step B: Material Code List
-    mat_options = ["None (Custom)"]
+    mat_options = []
     if not filtered_db.empty:
         for idx, row in filtered_db.iterrows():
             mat_options.append(f"{row.get('Brand','')} ➔ {row.get('Type/Code','')} [{row.get('Category','')}]")
+    else:
+        mat_options = ["⚠️ No materials found for this category"]
             
     with c2:
         selected_mat_str = st.selectbox("2. Material Type/Code", mat_options)
@@ -59,12 +61,14 @@ def render():
     thickness_opts = []
     selected_lib_cat = "core" # default internal tag
     
-    if selected_mat_str != "None (Custom)":
+    is_valid_selection = False
+    if "➔" in selected_mat_str:
          import re
          match = re.search(r'➔ (.*?) \[(.*?)]', selected_mat_str)
          if match:
              code = match.group(1)
              lib_cat = match.group(2)
+             is_valid_selection = True
              
              # Convert Library Category to Python Logic Types
              if lib_cat.lower() in ["core", "prepreg", "soldermask", "silkscreen"]:
@@ -86,8 +90,12 @@ def render():
     with c3:
         if thickness_opts:
             thickness_val = st.selectbox("3. Allowed Thickness (mm)", thickness_opts)
+        elif is_valid_selection:
+            st.warning("⚠️ No thicknesses defined in DB for this material.")
+            thickness_val = None
         else:
-            thickness_val = st.number_input("3. Custom Thickness (mm)", min_value=0.001, value=0.035, format="%.3f")
+            st.info("Select a material first.")
+            thickness_val = None
 
     # Step D: Submit row
     st.markdown("*(Finalize Properties)*")
@@ -98,7 +106,9 @@ def render():
          new_name = st.text_input("Layer Name (Label)", value="New Layer")
     with c6:
          st.write("") # padding
-         if st.button("➕ Push Layer to Stack-up", type="primary", width="stretch"):
+         # Disable button if no valid material or thickness is selected
+         button_disabled = not is_valid_selection or thickness_val is None
+         if st.button("➕ Push Layer to Stack-up", type="primary", width="stretch", disabled=button_disabled):
              real_type = selected_lib_cat if cat_gui == "dielectric substrate" else ("copper" if cat_gui == "metal layer" else "soldermask")
              st.session_state['stackup_data']['layers'].append({
                  "id": new_id,
