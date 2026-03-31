@@ -1,6 +1,0 @@
-streamlit
-plotly
-pandas
-openpyxl
-gspread
-google-auth
