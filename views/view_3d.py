@@ -15,6 +15,8 @@ def render():
         st.warning("No stack-up data available. Build your layers in the Stack-up Editor first.")
         return
 
+    st.info("📚 Scroll below the 3D chart to find the integrated Material Library and Color Palette Editor.")
+
     with st.spinner("Rendering 3D Mesh..."):
         fig = build_3d_figure(
             stackup_data,

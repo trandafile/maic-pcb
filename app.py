@@ -13,6 +13,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+VIEW_MODES = ['Stack-up Editor', '2D Cross-Section', '3D Exploded View']
+
+
 def init_session_state():
     """Initialize necessary Streamlit session state variables safely."""
     color_manager.ensure_palette_state(st.session_state)
@@ -81,8 +84,12 @@ def init_session_state():
         st.session_state['show_name'] = True
     
     if 'view_mode' not in st.session_state:
-        st.session_state['view_mode'] = '2D Cross-Section'
-        
+        st.session_state['view_mode'] = 'Stack-up Editor'
+    elif st.session_state['view_mode'] == 'Material Library':
+        st.session_state['view_mode'] = '3D Exploded View'
+    elif st.session_state['view_mode'] not in VIEW_MODES:
+        st.session_state['view_mode'] = 'Stack-up Editor'
+
     if 'explosion_factor' not in st.session_state:
         st.session_state['explosion_factor'] = 0.0
 
@@ -111,10 +118,16 @@ def build_sidebar():
         help="Toggle layer name display on the left side."
     )
     
+    st.sidebar.caption("📚 `Material Library` and `Color Palette Editor` are now integrated inside `3D Exploded View`.")
+
+    current_view = st.session_state.get('view_mode', 'Stack-up Editor')
+    if current_view not in VIEW_MODES:
+        current_view = '3D Exploded View' if current_view == 'Material Library' else 'Stack-up Editor'
+
     st.session_state['view_mode'] = st.sidebar.radio(
-        "View Mode", 
-        options=['Stack-up Editor', 'Material Library', '2D Cross-Section', '3D Exploded View'], 
-        index=0 if st.session_state['view_mode'] == 'Stack-up Editor' else (2 if st.session_state['view_mode'] == '2D Cross-Section' else (3 if st.session_state['view_mode'] == '3D Exploded View' else 1))
+        "View Mode",
+        options=VIEW_MODES,
+        index=VIEW_MODES.index(current_view)
     )
     
     st.sidebar.subheader("3D Controls")
@@ -215,8 +228,6 @@ def main():
     # Routing logic based on view mode
     if st.session_state['view_mode'] == 'Stack-up Editor':
         view_editor.render()
-    elif st.session_state['view_mode'] == 'Material Library':
-        view_library.render()
     elif st.session_state['view_mode'] == '2D Cross-Section':
         view_2d.render()
     elif st.session_state['view_mode'] == '3D Exploded View':
