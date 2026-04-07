@@ -55,6 +55,8 @@ class TestHfssExporter(unittest.TestCase):
         self.assertIn('oDesign.SetVariableValue(name, value)', script)
         self.assertIn('oDesign.ChangeProperty(', script)
         self.assertIn('def create_dielectric_box(name, z_position, z_size, material_name, color_rgb, transparency=0.35):', script)
+        self.assertIn('existing_objects = list(oEditor.GetObjectsInGroup("Solids"))', script)
+        self.assertIn('if name in existing_objects:', script)
         self.assertIn('oEditor.CreateBox(', script)
 
     def test_defines_dielectric_variables_before_dependent_metal_variables(self):

@@ -142,19 +142,19 @@ def generate_css(palette_name="classic"):
     return css
 
 def _format_layer_label(layer, show_id=True, show_name=True):
-    """Format a layer label using `ID - Name` when both toggles are enabled."""
+    """Format a layer label using `Layer name - ID` when both toggles are enabled."""
     layer_id = str(layer.get('id', '')).strip()
     layer_name = str(layer.get('name', '')).strip()
 
     parts = []
-    if show_id and layer_id:
-        parts.append(layer_id)
     if show_name and layer_name:
         parts.append(layer_name)
+    if show_id and layer_id:
+        parts.append(layer_id)
 
     if parts:
         return " - ".join(parts)
-    return " - ".join(part for part in [layer_id, layer_name] if part) or "&nbsp;"
+    return " - ".join(part for part in [layer_name, layer_id] if part) or "&nbsp;"
 
 
 def render_html(stackup_data, palette="classic", show_id=True, show_name=True):

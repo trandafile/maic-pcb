@@ -3,19 +3,19 @@ import numpy as np
 
 
 def format_layer_label(layer, show_id=True, show_name=True):
-    """Format a layer label using the active ID/name toggles."""
+    """Format a layer label using the requested `Layer name - ID` ordering."""
     layer_id = str(layer.get('id', '')).strip()
     layer_name = str(layer.get('name', '')).strip()
 
     parts = []
-    if show_id and layer_id:
-        parts.append(layer_id)
     if show_name and layer_name:
         parts.append(layer_name)
+    if show_id and layer_id:
+        parts.append(layer_id)
 
     if parts:
         return " - ".join(parts)
-    return " - ".join(part for part in [layer_id, layer_name] if part) or "Layer"
+    return " - ".join(part for part in [layer_name, layer_id] if part) or "Layer"
 
 
 def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True):
@@ -33,6 +33,8 @@ def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True
     width = 10.0
     length = 10.0
     
+    side_labels = []
+
     for i, layer in enumerate(layers):
         thickness = float(layer.get('thickness', 0.1))
         l_type = layer.get('type', 'dielectric')
@@ -75,17 +77,11 @@ def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True
             flatshading=True
         ))
 
-        if visible_label:
-            fig.add_trace(go.Scatter3d(
-                x=[width / 2.0],
-                y=[length / 2.0],
-                z=[z_top + max(0.06, explosion_factor * 0.08 + 0.02)],
-                mode="text",
-                text=[visible_label],
-                textfont=dict(size=12, color="#222222"),
-                hoverinfo="skip",
-                showlegend=False
-            ))
+        side_labels.append({
+            "label": visible_label,
+            "thickness": thickness,
+            "index": i,
+        })
 
         current_z -= thickness
         
@@ -122,6 +118,40 @@ def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True
                 hoverinfo="name"
             ))
             
+    # Side annotations: left labels and right thicknesses aligned in vertical columns
+    annotations = []
+    total_layers = max(len(side_labels), 1)
+    for item in side_labels:
+        if total_layers == 1:
+            y_pos = 0.5
+        else:
+            y_pos = 0.88 - (item["index"] * (0.68 / (total_layers - 1)))
+
+        if item["label"]:
+            annotations.append(dict(
+                x=0.16,
+                y=y_pos,
+                xref="paper",
+                yref="paper",
+                text=item["label"],
+                showarrow=False,
+                xanchor="right",
+                align="right",
+                font=dict(size=14, color="#222222")
+            ))
+
+        annotations.append(dict(
+            x=0.90,
+            y=y_pos,
+            xref="paper",
+            yref="paper",
+            text=f"{item['thickness']:.3f} mm",
+            showarrow=False,
+            xanchor="left",
+            align="left",
+            font=dict(size=14, color="#222222")
+        ))
+
     # Polishing Layout
     fig.update_layout(
         scene=dict(
@@ -133,7 +163,8 @@ def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True
                 eye=dict(x=1.5, y=-1.5, z=0.5)
             )
         ),
-        margin=dict(l=0, r=0, b=0, t=30),
+        annotations=annotations,
+        margin=dict(l=170, r=140, b=20, t=40),
         title="3D Exploded Representation",
         showlegend=False
     )

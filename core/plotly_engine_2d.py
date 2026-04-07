@@ -2,19 +2,19 @@ import plotly.graph_objects as go
 
 
 def format_layer_label(layer, show_id=True, show_name=True):
-    """Format a layer label using the active ID/name toggles."""
+    """Format a layer label using the requested `Layer name - ID` ordering."""
     layer_id = str(layer.get('id', '')).strip()
     layer_name = str(layer.get('name', '')).strip()
 
     parts = []
-    if show_id and layer_id:
-        parts.append(layer_id)
     if show_name and layer_name:
         parts.append(layer_name)
+    if show_id and layer_id:
+        parts.append(layer_id)
 
     if parts:
         return " - ".join(parts)
-    return " - ".join(part for part in [layer_id, layer_name] if part) or "Layer"
+    return " - ".join(part for part in [layer_name, layer_id] if part) or "Layer"
 
 
 def calculate_z_map(layers):
@@ -160,22 +160,34 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
             showlegend=False
         ))
 
-        # Annotations (Labels) - Left side only
-        left_lbl_x = x_min + 0.5
+        # Annotations: left label column + right thickness column
+        label_y = y_top - (z_info['thickness'] / 2.0)
+        thickness_text = f"{float(z_info['thickness']):.3f} mm"
 
-        lbl_text = visible_label
-        if lbl_text:
-            lbl_text += f" ({float(z_info['thickness']):.3f}mm)"
-
-        if show_id or show_name:
+        if visible_label:
             fig.add_annotation(
-                x=left_lbl_x,
-                y=y_top - (z_info['thickness']/2.0),
-                text=lbl_text,
+                x=0.14,
+                y=label_y,
+                xref="paper",
+                yref="y",
+                text=visible_label,
                 showarrow=False,
-                xanchor="left",
-                font=dict(size=11, color="#555")
+                xanchor="right",
+                align="right",
+                font=dict(size=13, color="#222222")
             )
+
+        fig.add_annotation(
+            x=0.92,
+            y=label_y,
+            xref="paper",
+            yref="y",
+            text=thickness_text,
+            showarrow=False,
+            xanchor="left",
+            align="left",
+            font=dict(size=13, color="#222222")
+        )
             
     # --- 2. DRAW VIAS ---
     for v_idx, via in enumerate(vias):
@@ -253,7 +265,7 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
     fig.update_layout(
         plot_bgcolor='#FAFAFA',
         paper_bgcolor="#FFFFFF",
-        margin=dict(l=60, r=60, t=60, b=40),
+        margin=dict(l=190, r=150, t=60, b=40),
         height=650,
         showlegend=False,
         hovermode="closest"
