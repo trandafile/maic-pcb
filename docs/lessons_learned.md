@@ -26,3 +26,8 @@
 ## Material Library Category Dropdown (Date: 2026-04-07)
 * **Rule:** The Category column in `view_library.py` must use `st.column_config.SelectboxColumn` with strict options: `["copper", "core", "prepreg"]`.
 * **Benefit:** Prevents user input errors and ensures consistent data for HFSS exporter logic.
+
+## HFSS Export Syntax Safety (Date: 2026-04-07)
+* **Issue:** The exported AEDT script broke with a bracket mismatch caused by manually assembling deeply nested `ChangeProperty` lists.
+* **Solution:** Generate smaller, reusable helper calls (`add_local_variable`, `add_separator`, `create_dielectric_box`) instead of one giant nested block.
+* **Rule:** For HFSS/AEDT exports, prefer compact helper-based Python output and always verify the generated script with `compile(...)` before considering the export complete.

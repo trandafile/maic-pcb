@@ -4,7 +4,8 @@
       "Bash(python *)",
       "Bash(del *)",
       "Bash(type *)",
-      "Bash(out-file *)"
+      "Bash(out-file *)",
+      "Bash(dir *)"
     ]
   },
   "$version": 3
