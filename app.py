@@ -2,6 +2,7 @@ import streamlit as st
 from views import view_2d, view_library, view_editor, view_3d
 from core import data_parser
 from core import auth
+from core import hfss_exporter
 
 # Configuration MUST be the first Streamlit command
 st.set_page_config(
@@ -18,12 +19,14 @@ def init_session_state():
         st.session_state['material_library'] = data_parser.get_material_library()
 
     # Dummy JSON-like stack-up data dictionary (2 metal layers, 1 dielectric core, 1 through-hole via)
+    # NOTE: Layers are ordered TOP-DOWN in the list (index 0 = top), but IDs are numbered BOTTOM-UP
+    # So L1 = Bottom Copper, D1 = Core, L2 = Top Copper
     if 'stackup_data' not in st.session_state:
         st.session_state['stackup_data'] = {
             "layers": [
                 {
-                    "id": "L1",
-                    "name": "Top Copper",
+                    "id": "L2",
+                    "name": "L2 - Top Copper",
                     "type": "metal",
                     "material_ref": "Generic Copper",
                     "thickness": 0.035, # mm
@@ -31,15 +34,15 @@ def init_session_state():
                 },
                 {
                     "id": "D1",
-                    "name": "FR4 Core",
+                    "name": "D1 - FR4 Core",
                     "type": "dielectric",
                     "material_ref": "Generic FR4",
                     "thickness": 1.5, # mm
                     "color_hex": "#708090" # Matte Earth Tones for dielectrics
                 },
                 {
-                    "id": "L2",
-                    "name": "Bottom Copper",
+                    "id": "L1",
+                    "name": "L1 - Bottom Copper",
                     "type": "metal",
                     "material_ref": "Generic Copper",
                     "thickness": 0.035, # mm
@@ -50,10 +53,10 @@ def init_session_state():
                 {
                     "id": "VIA_TH_1",
                     "type": "PTH",
-                    "start_layer": "L1",
-                    "end_layer": "L2",
+                    "start_layer": "L2",
+                    "end_layer": "L1",
                     "drill_diameter": 0.3, # mm
-                    "label": "PTH\nL1-L2"
+                    "label": "PTH\nL2-L1"
                 }
             ]
         }
@@ -115,10 +118,25 @@ def build_sidebar():
     
     st.sidebar.divider()
     st.sidebar.subheader("📁 Project I/O")
-    
+
     import json
     json_str = json.dumps(st.session_state.get('stackup_data', {}), indent=4)
     st.sidebar.download_button("💾 Export Project (JSON)", data=json_str, file_name="pcb_stackup.json", mime="application/json", width="stretch")
+
+    # HFSS Script Export
+    if st.sidebar.button("📜 Export HFSS Script", use_container_width=True):
+        try:
+            hfss_script = hfss_exporter.generate_hfss_script(st.session_state['stackup_data'])
+            st.sidebar.download_button(
+                "⬇️ Download HFSS Script",
+                data=hfss_script,
+                file_name="pcb_stackup_hfss.py",
+                mime="text/plain",
+                width="stretch"
+            )
+            st.sidebar.success("✅ Script generated!")
+        except Exception as e:
+            st.sidebar.error(f"❌ Error generating script: {e}")
     
     uploaded_file = st.sidebar.file_uploader("📂 Load Project (.json)", type=["json"], key="json_uploader")
     if uploaded_file is not None:

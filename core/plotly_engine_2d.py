@@ -136,14 +136,14 @@ def build_2d_figure(stackup_data, show_labels=True, show_left_labels=False):
             fillcolor=color,
             opacity=0.0,
             hoverinfo="text",
-            text=f"<b>{layer['name']}</b> ({layer['type']})<br>Thick: {z_info['thickness']}mm",
+            text=f"<b>[{layer['id']}] {layer['name']}</b> ({layer['type']})<br>Thick: {z_info['thickness']}mm",
             showlegend=False
         ))
 
         # Annotations (Labels)
         right_lbl_x = x_max - 0.5
         left_lbl_x = x_min + 0.5
-        lbl_text = f"{layer['name']} ({float(z_info['thickness']):.3f}mm)"
+        lbl_text = f"[{layer['id']}] {layer['name']} ({float(z_info['thickness']):.3f}mm)"
         
         if show_labels:
             fig.add_annotation(

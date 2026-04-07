@@ -5,11 +5,11 @@ from core import data_parser
 def render():
     st.title("Material Library Database")
     st.markdown("This view renders the central materials library currently loaded from **Google Sheets**.")
-    
+
     if 'material_library' in st.session_state:
         # We use a copy to compare after editing
         original_df = st.session_state['material_library']
-        
+
         if original_df.empty:
             st.info("💡 The Cloud database appears to be empty.")
             if st.button("🌱 Initialize with Sample Materials", use_container_width=True):
@@ -27,7 +27,7 @@ def render():
                     st.rerun()
                 else:
                     st.error("❌ Failed to initialize Cloud database. Check your connection/secrets.")
-        
+
         c1, c2 = st.columns([4, 1])
         with c1:
              st.caption(f"📊 Material Database ({len(original_df)} entries)")
@@ -36,14 +36,26 @@ def render():
              if not original_df.empty and st.button("🔌 Force Sync", type="secondary", use_container_width=True):
                  if data_parser.save_material_library_to_cloud(original_df):
                      st.toast("✅ Force sync successful!")
-        
+
+        # Configure column with Selectbox for Category
+        column_config = {
+            "Category": st.column_config.SelectboxColumn(
+                "Category",
+                help="Select the material category",
+                options=["copper", "core", "prepreg"],
+                required=True,
+                width="medium"
+            )
+        }
+
         # INTERACTIVE DATA EDITOR
         edited_df = st.data_editor(
             original_df,
             num_rows="dynamic",
             width="stretch",
             height=600,
-            key="library_editor"
+            key="library_editor",
+            column_config=column_config
         )
         
         # AUTOMATIC SAVE LOGIC

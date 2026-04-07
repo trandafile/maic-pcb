@@ -50,7 +50,8 @@ def build_3d_figure(stackup_data, explosion_factor):
             color=color,
             opacity=opacity,
             name=f"[{layer['id']}] {layer.get('name', 'Layer')}",
-            hoverinfo="name",
+            hoverinfo="name+text",
+            hovertext=f"[{layer['id']}] {layer.get('name', 'Layer')}<br>Type: {l_type}<br>Thickness: {thickness}mm",
             flatshading=True
         ))
         

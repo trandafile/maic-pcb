@@ -198,7 +198,7 @@ def render_html(stackup_data, palette="classic"):
         
         html += f"""
             <div class="layer-row" style="height:{px_h}px">
-                <div class="layer-label {css_type}">{name}</div>
+                <div class="layer-label {css_type}">[{layer.get('id', str(idx))}] {name}</div>
                 <div class="layer-bar {css_type}">{layer.get('material_ref', '')}</div>
                 <div class="layer-dim">{thick_mm:.3f} mm</div>
             </div>
