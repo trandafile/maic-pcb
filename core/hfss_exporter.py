@@ -224,14 +224,96 @@ def _build_layer_definitions(layers_bottom_up: List[Dict[str, Any]]) -> List[Dic
     return definitions
 
 
+def _build_change_property_block(properties: List[Dict[str, str]], separator_name: Optional[str] = None) -> List[str]:
+    lines = [
+        "oDesign.ChangeProperty(",
+        "    [",
+        '        "NAME:AllTabs",',
+        "        [",
+        '            "NAME:LocalVariableTab",',
+        "            [",
+        '                "NAME:PropServers", ',
+        '                "LocalVariables"',
+        "            ],",
+        "            [",
+        '                "NAME:NewProps",',
+    ]
+
+    blocks: List[List[str]] = []
+    if separator_name:
+        blocks.append([
+            "                [",
+            f'                    "NAME:{separator_name}",',
+            '                    "PropType:="        , "SeparatorProp",',
+            '                    "UserDef:="         , True,',
+            '                    "Value:="           , ""',
+            "                ]",
+        ])
+
+    for prop in properties:
+        blocks.append([
+            "                [",
+            f'                    "NAME:{prop["name"]}",',
+            f'                    "PropType:="        , "{prop.get("prop_type", "VariableProp")}",',
+            '                    "UserDef:="         , True,',
+            f'                    "Value:="           , "{prop["value"]}"',
+            "                ]",
+        ])
+
+    for idx, block in enumerate(blocks):
+        if idx < len(blocks) - 1:
+            block[-1] += ","
+        lines.extend(block)
+
+    lines.extend([
+        "            ]",
+        "        ]",
+        "    ])",
+    ])
+    return lines
+
+
+def _build_create_box_block(entry: Dict[str, Any]) -> List[str]:
+    return [
+        "oEditor.CreateBox(",
+        "    [",
+        '        "NAME:BoxParameters",',
+        '        "XPosition:="        , "-dielX/2",',
+        '        "YPosition:="        , "-dielY/2",',
+        f'        "ZPosition:="        , "{entry["id"]}_low",',
+        '        "XSize:="            , "dielX",',
+        '        "YSize:="            , "dielY",',
+        f'        "ZSize:="            , "{entry["id"]}_h"',
+        "    ], ",
+        "    [",
+        '        "NAME:Attributes",',
+        f'        "Name:="             , "{entry["id"]}_box",',
+        '        "Flags:="            , "",',
+        f'        "Color:="            , "{entry["color_rgb"]}",',
+        f'        "Transparency:="     , {entry["transparency"]},',
+        '        "PartCoordinateSystem:=", "Global",',
+        '        "UDMId:="            , "",',
+        f'        "MaterialValue:="     , "\\"{entry["material_name"]}\\"",',
+        '        "SurfaceMaterialValue:=", "\\"\\"",',
+        '        "SolveInside:="      , True,',
+        '        "ShellElement:="     , False,',
+        '        "ShellElementThickness:=", "0mm",',
+        '        "ReferenceTemperature:=", "20cel",',
+        '        "IsMaterialEditable:=", True,',
+        '        "UseMaterialAppearance:=", False,',
+        '        "IsLightweight:="    , False',
+        "    ])",
+    ]
+
+
 def generate_hfss_script(
     stackup_data: Dict[str, Any],
     diel_x: str = "10mm",
     diel_y: str = "10mm",
-    project_name: str = "Project1",
-    design_name: str = "HFSSDesign1",
+    project_name: Optional[str] = None,
+    design_name: Optional[str] = None,
 ) -> str:
-    """Generate a syntactically valid AEDT Python script from the current stack-up."""
+    """Generate an AEDT recorder-style Python script from the current stack-up."""
     layers = stackup_data.get("layers", [])
     if not layers:
         return "# No layers defined in stackup_data.\n"
@@ -245,88 +327,28 @@ def generate_hfss_script(
         "import ScriptEnv",
         'ScriptEnv.Initialize("Ansoft.ElectronicsDesktop")',
         "oDesktop.RestoreWindow()",
-        f'oProject = oDesktop.SetActiveProject("{_escape_python_string(project_name)}")',
-        f'oDesign = oProject.SetActiveDesign("{_escape_python_string(design_name)}")',
+        f'oProject = oDesktop.SetActiveProject("{_escape_python_string(project_name)}")' if project_name else 'oProject = oDesktop.GetActiveProject()',
+        'if oProject is None:',
+        '    raise Exception("Loading project failed: no active AEDT project.")',
+        f'oDesign = oProject.SetActiveDesign("{_escape_python_string(design_name)}")' if design_name else 'oDesign = oProject.GetActiveDesign()',
+        'if oDesign is None:',
+        '    raise Exception("Loading HFSS design failed: no active AEDT design.")',
         'oEditor = oDesign.SetActiveEditor("3D Modeler")',
         "",
-        "def add_local_variable(name, value):",
-        "    oDesign.ChangeProperty(",
-        "        [",
-        '            "NAME:AllTabs",',
-        "            [",
-        '                "NAME:LocalVariableTab",',
-        '                ["NAME:PropServers", "LocalVariables"],',
-        "                [",
-        '                    "NAME:NewProps",',
-        "                    [",
-        '                        "NAME:" + name,',
-        '                        "PropType:=", "VariableProp",',
-        '                        "UserDef:=", True,',
-        '                        "Value:=", value,',
-        "                    ],",
-        "                ],",
-        "            ],",
-        "        ]",
-        "    )",
-        "",
-        "def add_separator(name):",
-        "    oDesign.ChangeProperty(",
-        "        [",
-        '            "NAME:AllTabs",',
-        "            [",
-        '                "NAME:LocalVariableTab",',
-        '                ["NAME:PropServers", "LocalVariables"],',
-        "                [",
-        '                    "NAME:NewProps",',
-        "                    [",
-        '                        "NAME:" + name,',
-        '                        "PropType:=", "SeparatorProp",',
-        '                        "UserDef:=", True,',
-        '                        "Value:=", "",',
-        "                    ],",
-        "                ],",
-        "            ],",
-        "        ]",
-        "    )",
-        "",
-        "def create_dielectric_box(name, z_position, z_size, material_name, color_rgb, transparency=0.55):",
-        "    oEditor.CreateBox(",
-        "        [",
-        '            "NAME:BoxParameters",',
-        '            "XPosition:=", "-DielX/2",',
-        '            "YPosition:=", "-DielY/2",',
-        '            "ZPosition:=", z_position,',
-        '            "XSize:=", "DielX",',
-        '            "YSize:=", "DielY",',
-        '            "ZSize:=", z_size,',
-        "        ],",
-        "        [",
-        '            "NAME:Attributes",',
-        '            "Name:=", name,',
-        '            "Flags:=", "",',
-        '            "Color:=", color_rgb,',
-        '            "Transparency:=", transparency,',
-        '            "PartCoordinateSystem:=", "Global",',
-        '            "UDMId:=", "",',
-        '            "MaterialValue:=", "\\\"{}\\\"".format(material_name),',
-        '            "SurfaceMaterialValue:=", "",',
-        '            "SolveInside:=", True,',
-        '            "ShellElement:=", False,',
-        '            "ShellElementThickness:=", "0mm",',
-        '            "ReferenceTemperature:=", "20cel",',
-        '            "IsMaterialEditable:=", True,',
-        '            "UseMaterialAppearance:=", False,',
-        '            "IsLightweight:=", False,',
-        "        ],",
-        "    )",
-        "",
         "# Global stack-up variables",
-        f'add_local_variable("DielX", "{_escape_python_string(diel_x)}")',
-        f'add_local_variable("DielY", "{_escape_python_string(diel_y)}")',
-        'add_separator("PCB_Stackup")',
-        "",
-        "# Z = 0 at the base of the lowest dielectric",
     ]
+
+    lines.extend(
+        _build_change_property_block(
+            [
+                {"name": "dielX", "value": _escape_python_string(diel_x)},
+                {"name": "dielY", "value": _escape_python_string(diel_y)},
+            ],
+            separator_name="PCB_stack_up",
+        )
+    )
+    lines.append("")
+    lines.append("# Z = 0 at the base of the lowest dielectric")
 
     for entry in layer_definitions:
         lines.append(f"# [{entry['raw_id']}] {entry['name']}")
@@ -334,21 +356,26 @@ def generate_hfss_script(
         if entry["family"] == "metal":
             lines.append(f"# {entry['logic_note']}")
             if entry["direction"] == "down":
-                lines.append(f'add_local_variable("{entry["id"]}_h", "{entry["h_expr"]}")')
-                lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
-                lines.append(f'add_local_variable("{entry["id"]}_low", "{entry["low_expr"]}")')
+                props = [
+                    {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
+                    {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
+                    {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
+                ]
             else:
-                lines.append(f'add_local_variable("{entry["id"]}_low", "{entry["low_expr"]}")')
-                lines.append(f'add_local_variable("{entry["id"]}_h", "{entry["h_expr"]}")')
-                lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
+                props = [
+                    {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
+                    {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
+                    {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
+                ]
+            lines.extend(_build_change_property_block(props))
         else:
-            lines.append(f'add_local_variable("{entry["id"]}_low", "{entry["low_expr"]}")')
-            lines.append(f'add_local_variable("{entry["id"]}_h", "{entry["h_expr"]}")')
-            lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
-            lines.append(
-                f'create_dielectric_box("{entry["id"]}_box", "{entry["id"]}_low", "{entry["id"]}_h", '
-                f'"{entry["material_name"]}", "{entry["color_rgb"]}", transparency={entry["transparency"]})'
-            )
+            props = [
+                {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
+                {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
+                {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
+            ]
+            lines.extend(_build_change_property_block(props))
+            lines.extend(_build_create_box_block(entry))
 
         lines.append("")
 
