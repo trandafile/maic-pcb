@@ -95,6 +95,23 @@ class TestHfssExporter(unittest.TestCase):
         self.assertIn('add_local_variable("L1_low", "L1_high-L1_h")', script)
         self.assertIn('add_local_variable("L2_low", "D1_high")', script)
 
+    def test_exports_via_radius_variables(self):
+        stackup_data = {
+            "layers": [
+                {"id": "L2", "name": "Top", "type": "metal", "thickness": 0.035, "material_ref": "Generic Copper"},
+                {"id": "D1", "name": "Core", "type": "core", "thickness": 1.0, "material_ref": "FR4"},
+                {"id": "L1", "name": "Bottom", "type": "metal", "thickness": 0.035, "material_ref": "Generic Copper"},
+            ],
+            "vias": [
+                {"id": "VIA_TH_1", "drill_diameter": 0.3},
+            ],
+        }
+
+        script = generate_hfss_script(stackup_data)
+        compile(script, "pcb_stackup_hfss.py", "exec")
+
+        self.assertIn('add_local_variable("VIA_TH_1_r", "0.15mm")', script)
+
     def test_handles_prepreg_core_penetration_rule(self):
         stackup_data = {
             "layers": [

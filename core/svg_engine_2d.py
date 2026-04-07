@@ -1,38 +1,9 @@
-from core.html_engine_2d import layer_height_px
+from core import color_manager
+from core.html_engine_2d import layer_height_px, _format_layer_label
 
-# Define identical SVG color mappings
-PALETTES = {
-    "classic": {
-        "cu_top": "#E8923A", "cu_bot": "#C06820", "cu_text": "#4A2810",
-        "pp_top": "#A8BC80", "pp_bot": "#7A9050", "pp_text": "#3A4828",
-        "core_top": "#8BA060", "core_bot": "#5A7030", "core_text": "#C8E0A0",
-        "sm_top": "#2E8B57", "sm_bot": "#006400", "sm_text": "#E0FFE0",
-        "ss_top": "#FFFFFF", "ss_bot": "#E0E0E0", "ss_text": "#000000",
-        "via_l": "#A85A20", "via_c": "#D4782C", "via_r": "#A85A20",
-        "via_pad_t": "#F0A048", "via_pad_b": "#D88030", "via_hole": "#1a1a1a"
-    },
-    "cool_technical": {
-        "cu_top": "#64B5F6", "cu_bot": "#1976D2", "cu_text": "#0D47A1",
-        "pp_top": "#E0E0E0", "pp_bot": "#BDBDBD", "pp_text": "#616161",
-        "core_top": "#90A4AE", "core_bot": "#607D8B", "core_text": "#ECEFF1",
-        "sm_top": "#2E8B57", "sm_bot": "#006400", "sm_text": "#E0FFE0",
-        "ss_top": "#FFFFFF", "ss_bot": "#E0E0E0", "ss_text": "#000000",
-        "via_l": "#1565C0", "via_c": "#42A5F5", "via_r": "#1565C0",
-        "via_pad_t": "#64B5F6", "via_pad_b": "#1E88E5", "via_hole": "#1a1a1a"
-    },
-    "realistic": {
-        "cu_top": "#D4A574", "cu_bot": "#B8860B", "cu_text": "#8B4513",
-        "pp_top": "#F5F5DC", "pp_bot": "#D4C896", "pp_text": "#8B8B00",
-        "core_top": "#BDB76B", "core_bot": "#8B8B00", "core_text": "#FFFFF0",
-        "sm_top": "#2E8B57", "sm_bot": "#006400", "sm_text": "#E0FFE0",
-        "ss_top": "#FFFFFF", "ss_bot": "#E0E0E0", "ss_text": "#000000",
-        "via_l": "#8B4513", "via_c": "#D4A574", "via_r": "#8B4513",
-        "via_pad_t": "#E6C88A", "via_pad_b": "#CD853F", "via_hole": "#1a1a1a"
-    }
-}
 
-def render_svg(stackup_data, palette="classic"):
-    p = PALETTES.get(palette, PALETTES["classic"])
+def render_svg(stackup_data, palette="Classic", palette_colors=None):
+    p = color_manager.build_render_palette(palette, palette_colors)
     
     layers = stackup_data.get('layers', [])
     vias = stackup_data.get('vias', [])
@@ -91,8 +62,8 @@ def render_svg(stackup_data, palette="classic"):
     for l in layer_map:
         t_col = p.get(f"{l['type']}_text", "#000")
         svg += f'<rect x="{x_offset}" y="{l["y_top"]}" width="{rect_width}" height="{l["px_h"]}" fill="url(#grad-{l["type"]})" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>\n'
-        # Left Label
-        svg += f'<text x="{x_offset - 10}" y="{l["y_top"] + (l["px_h"]/2) + 4}" fill="{t_col}" font-size="12px" font-weight="bold" text-anchor="end">{l["name"]}</text>\n'
+        label_text = _format_layer_label({"id": l["id"], "name": l["name"]}, show_id=True, show_name=True)
+        svg += f'<text x="{x_offset - 10}" y="{l["y_top"] + (l["px_h"]/2) + 4}" fill="{t_col}" font-size="12px" font-weight="bold" text-anchor="end">{label_text}</text>\n'
         # Right Thickness
         svg += f'<text x="{x_offset + rect_width + 10}" y="{l["y_top"] + (l["px_h"]/2) + 4}" fill="#666" font-size="11px" font-family="monospace">{l["thick_mm"]:.3f} mm</text>\n'
         # Center Material label (approx)

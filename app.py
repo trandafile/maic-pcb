@@ -3,6 +3,7 @@ from views import view_2d, view_library, view_editor, view_3d
 from core import data_parser
 from core import auth
 from core import hfss_exporter
+from core import color_manager
 
 # Configuration MUST be the first Streamlit command
 st.set_page_config(
@@ -14,9 +15,14 @@ st.set_page_config(
 
 def init_session_state():
     """Initialize necessary Streamlit session state variables safely."""
+    color_manager.ensure_palette_state(st.session_state)
+
     if 'material_library' not in st.session_state:
         # Load external or mock library
         st.session_state['material_library'] = data_parser.get_material_library()
+
+    metal_color = color_manager.get_role_color(st.session_state, 'metal')
+    core_color = color_manager.get_role_color(st.session_state, 'core')
 
     # Dummy JSON-like stack-up data dictionary (2 metal layers, 1 dielectric core, 1 through-hole via)
     # NOTE: Layers are ordered TOP-DOWN in the list (index 0 = top), but IDs are numbered BOTTOM-UP
@@ -30,7 +36,9 @@ def init_session_state():
                     "type": "metal",
                     "material_ref": "Generic Copper",
                     "thickness": 0.035, # mm
-                    "color_hex": "#CC5500" # Orange Shades for metals
+                    "color_hex": metal_color,
+                    "color_source": "palette",
+                    "palette_role": "metal"
                 },
                 {
                     "id": "D1",
@@ -38,7 +46,9 @@ def init_session_state():
                     "type": "dielectric",
                     "material_ref": "Generic FR4",
                     "thickness": 1.5, # mm
-                    "color_hex": "#708090" # Matte Earth Tones for dielectrics
+                    "color_hex": core_color,
+                    "color_source": "palette",
+                    "palette_role": "core"
                 },
                 {
                     "id": "L1",
@@ -46,7 +56,9 @@ def init_session_state():
                     "type": "metal",
                     "material_ref": "Generic Copper",
                     "thickness": 0.035, # mm
-                    "color_hex": "#CC5500" # Orange Shades
+                    "color_hex": metal_color,
+                    "color_source": "palette",
+                    "palette_role": "metal"
                 }
             ],
             "vias": [

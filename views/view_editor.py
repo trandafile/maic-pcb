@@ -4,7 +4,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from core import hfss_exporter
+from core import color_manager, hfss_exporter
 
 
 def _normalize_text(value):
@@ -80,11 +80,8 @@ def _parse_thicknesses(raw_value):
 
 
 def _default_color_for_type(layer_type):
-    if layer_type == "copper":
-        return "#CC5500"
-    if layer_type in {"soldermask", "cover"}:
-        return "#2E8B57"
-    return "#708090"
+    role = color_manager.get_default_palette_role(layer_type)
+    return color_manager.get_role_color(st.session_state, role)
 
 
 def _normalize_hex_color(value, fallback):
@@ -104,36 +101,21 @@ def _normalize_hex_color(value, fallback):
     return color.upper()
 
 
-def _get_color_presets(layer_type):
-    if layer_type == "copper":
-        return [
-            ("Copper Orange", "#CC5500"),
-            ("Coral Copper", "#FF7F50"),
-            ("Bronze", "#B87333"),
-            ("Amber", "#D67D3E"),
-        ]
-
-    if layer_type in {"core", "prepreg", "dielectric"}:
-        return [
-            ("Slate Gray", "#708090"),
-            ("Muted Olive", "#556B2F"),
-            ("Dust Blue", "#5F7180"),
-            ("Moss", "#6B7D5C"),
-        ]
-
-    return [
-        ("Soldermask Green", "#2E8B57"),
-        ("Teal", "#3B7A78"),
-        ("Slate Gray", "#708090"),
-        ("Muted Olive", "#556B2F"),
-    ]
+def _get_color_presets():
+    return color_manager.build_preset_options(st.session_state)
 
 
-def _find_best_color_preset_index(presets, current_color):
-    normalized = _normalize_hex_color(current_color, presets[0][1])
-    for idx, (_, hex_value) in enumerate(presets):
-        if _normalize_hex_color(hex_value, presets[0][1]) == normalized:
+def _find_best_color_preset_index(presets, defaults, final_type):
+    preferred_role = defaults.get("palette_role") or color_manager.get_default_palette_role(defaults.get("type") or final_type)
+    for idx, preset in enumerate(presets):
+        if preset["role"] == preferred_role:
             return idx
+
+    current_color = _normalize_hex_color(defaults.get("color_hex"), presets[0]["hex"])
+    for idx, preset in enumerate(presets):
+        if _normalize_hex_color(preset["hex"], presets[0]["hex"]) == current_color:
+            return idx
+
     return 0
 
 
@@ -238,10 +220,10 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
         defaults.get("color_hex"),
         _default_color_for_type(final_type),
     )
-    color_presets = _get_color_presets(final_type)
-    preset_labels = [f"{name} ({hex_value})" for name, hex_value in color_presets]
-    preset_map = dict(zip(preset_labels, [hex_value for _, hex_value in color_presets]))
-    preset_index = _find_best_color_preset_index(color_presets, current_color)
+    color_presets = _get_color_presets()
+    preset_labels = [preset["label"] for preset in color_presets]
+    preset_map = {preset["label"]: preset for preset in color_presets}
+    preset_index = _find_best_color_preset_index(color_presets, defaults, final_type)
 
     c4, c5 = st.columns(2)
     with c4:
@@ -264,16 +246,17 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
             preset_labels,
             index=preset_index,
             key=f"{key_prefix}_color_preset",
-            help="Choose from the recommended technical palette.",
+            help="Choose a numbered palette color. Layers linked to `Col#1`...`Col#4` will follow the active palette.",
         )
-        preset_color = preset_map[selected_preset_label]
+        selected_preset = preset_map[selected_preset_label]
+        preset_color = selected_preset["hex"]
 
     with c7:
         use_custom_color = st.toggle(
             "Use custom color / hex",
-            value=current_color not in preset_map.values(),
+            value=defaults.get("color_source") == "custom",
             key=f"{key_prefix}_use_custom_color",
-            help="Enable a free color picker with editable hex value.",
+            help="Enable a free color picker with editable hex value. Custom colors remain unchanged when the global palette changes.",
         )
         color_hex = st.color_picker(
             "Custom Color",
@@ -294,6 +277,8 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
         "thickness": float(thickness_val),
         "material_ref": selected_mat_str,
         "color_hex": final_color,
+        "color_source": "custom" if use_custom_color else "palette",
+        "palette_role": selected_preset["role"],
     }
 
 

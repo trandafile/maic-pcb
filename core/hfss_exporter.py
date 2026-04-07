@@ -315,6 +315,7 @@ def generate_hfss_script(
 ) -> str:
     """Generate an AEDT recorder-style Python script from the current stack-up."""
     layers = stackup_data.get("layers", [])
+    vias = stackup_data.get("vias", [])
     if not layers:
         return "# No layers defined in stackup_data.\n"
 
@@ -484,7 +485,19 @@ def generate_hfss_script(
             lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
         lines.append("")
 
-    lines.append("# 3) Create dielectric boxes using dielX and dielY")
+    lines.append("# 3) Define via radius variables")
+
+    for via in vias:
+        via_id = _sanitize_identifier(via.get("id", "VIA"))
+        drill_diameter = _to_float(via.get("drill_diameter"), 0.0)
+        via_radius_mm = drill_diameter / 2.0
+        via_radius_expr = _format_length(via_radius_mm, prefer_um=via_radius_mm < 0.1)
+
+        lines.append(f"# Via radius for [{_safe_str(via.get('id', via_id))}]")
+        lines.append(f'add_local_variable("{via_id}_r", "{via_radius_expr}")')
+        lines.append("")
+
+    lines.append("# 4) Create dielectric boxes using dielX and dielY")
 
     for entry in layer_definitions:
         if entry["family"] == "metal":

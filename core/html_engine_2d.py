@@ -1,5 +1,6 @@
 import os
 import ast
+from core import color_manager
 
 def layer_height_px(thickness_um: float, layer_type: str) -> int:
     """
@@ -19,114 +20,98 @@ def layer_height_px(thickness_um: float, layer_type: str) -> int:
         else:
             return 48 + int((thickness_um - 400) * 0.02)
 
-def generate_css(palette_name="classic"):
+def generate_css(palette_name="Classic", palette_colors=None):
     """
-    Returns the core CSS for the visual engine.
+    Returns the core CSS for the visual engine using the shared global palette.
     """
-    # The palettes 
-    palettes_css = """
-    .stackup-viewer {
-        --cu-top: #E8923A; --cu-bot: #C06820; --cu-text: #4A2810;
-        --pp-top: #A8BC80; --pp-bot: #7A9050; --pp-text: #3A4828;
-        --core-top: #8BA060; --core-bot: #5A7030; --core-text: #C8E0A0;
-        --sm-top: #2E8B57; --sm-bot: #006400; --sm-text: #E0FFE0;
-        --ss-top: #FFFFFF; --ss-bot: #E0E0E0; --ss-text: #000000;
-        
-        --via-l: #A85A20; --via-c: #D4782C; --via-r: #A85A20;
-        --via-pad-t: #F0A048; --via-pad-b: #D88030;
-        --via-hole: #1a1a1a;
-        
+    render_palette = color_manager.build_render_palette(palette_name, palette_colors)
+    palettes_css = f"""
+    .stackup-viewer {{
+        --cu-top: {render_palette['cu_top']}; --cu-bot: {render_palette['cu_bot']}; --cu-text: {render_palette['cu_text']};
+        --pp-top: {render_palette['pp_top']}; --pp-bot: {render_palette['pp_bot']}; --pp-text: {render_palette['pp_text']};
+        --core-top: {render_palette['core_top']}; --core-bot: {render_palette['core_bot']}; --core-text: {render_palette['core_text']};
+        --sm-top: {render_palette['sm_top']}; --sm-bot: {render_palette['sm_bot']}; --sm-text: {render_palette['sm_text']};
+        --ss-top: {render_palette['ss_top']}; --ss-bot: {render_palette['ss_bot']}; --ss-text: {render_palette['ss_text']};
+
+        --via-l: {render_palette['via_l']}; --via-c: {render_palette['via_c']}; --via-r: {render_palette['via_r']};
+        --via-pad-t: {render_palette['via_pad_t']}; --via-pad-b: {render_palette['via_pad_b']};
+        --via-hole: {render_palette['via_hole']};
+
         font-family: 'Inter', 'Segoe UI', sans-serif;
         background: #F9FAFB;
         padding: 20px;
         border-radius: 8px;
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
         min-width: 600px;
-    }
-    
-    .stackup-viewer[data-palette="cool_technical"] {
-        --cu-top: #64B5F6; --cu-bot: #1976D2; --cu-text: #0D47A1;
-        --pp-top: #E0E0E0; --pp-bot: #BDBDBD; --pp-text: #616161;
-        --core-top: #90A4AE; --core-bot: #607D8B; --core-text: #ECEFF1;
-        --via-l: #1565C0; --via-c: #42A5F5; --via-r: #1565C0;
-        --via-pad-t: #64B5F6; --via-pad-b: #1E88E5;
-    }
-    
-    .stackup-viewer[data-palette="realistic"] {
-        --cu-top: #D4A574; --cu-bot: #B8860B; --cu-text: #8B4513;
-        --pp-top: #F5F5DC; --pp-bot: #D4C896; --pp-text: #8B8B00;
-        --core-top: #BDB76B; --core-bot: #8B8B00; --core-text: #FFFFF0;
-        --via-l: #8B4513; --via-c: #D4A574; --via-r: #8B4513;
-        --via-pad-t: #E6C88A; --via-pad-b: #CD853F;
-    }
+    }}
 
-    .stackup-header { margin-bottom: 20px; font-weight: bold; font-size: 1.2rem; color: #333; }
-    .stackup-body { position: relative; width: 100%; display: flex; flex-direction: column; }
+    .stackup-header {{ margin-bottom: 20px; font-weight: bold; font-size: 1.2rem; color: #333; }}
+    .stackup-body {{ position: relative; width: 100%; display: flex; flex-direction: column; }}
     
-    .layer-row {
+    .layer-row {{
         display: flex;
         align-items: center;
         width: 100%;
         position: relative;
-    }
+    }}
     
-    .layer-label { width: 120px; text-align: right; padding-right: 15px; font-size: 12px; font-weight: bold; z-index: 2;}
-    .layer-bar { flex: 1; min-width: 300px; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; font-size: 11px; z-index: 1;}
-    .layer-dim { width: 70px; text-align: left; padding-left: 15px; font-size: 11px; font-family: monospace; color: #666; z-index: 2;}
+    .layer-label {{ width: 120px; text-align: right; padding-right: 15px; font-size: 12px; font-weight: bold; z-index: 2;}}
+    .layer-bar {{ flex: 1; min-width: 300px; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; font-size: 11px; z-index: 1;}}
+    .layer-dim {{ width: 70px; text-align: left; padding-left: 15px; font-size: 11px; font-family: monospace; color: #666; z-index: 2;}}
     
     /* Layer Gradients */
-    .layer-bar.copper { background: linear-gradient(180deg, var(--cu-top) 0%, var(--cu-bot) 100%); color: var(--cu-text); border-top: 1px solid rgba(0,0,0,0.1); border-bottom: 1px solid rgba(0,0,0,0.1); }
-    .layer-label.copper { color: var(--cu-top); }
+    .layer-bar.copper {{ background: linear-gradient(180deg, var(--cu-top) 0%, var(--cu-bot) 100%); color: var(--cu-text); border-top: 1px solid rgba(0,0,0,0.1); border-bottom: 1px solid rgba(0,0,0,0.1); }}
+    .layer-label.copper {{ color: var(--cu-top); }}
     
-    .layer-bar.prepreg { background: linear-gradient(180deg, var(--pp-top) 0%, var(--pp-bot) 100%); color: var(--pp-text); }
-    .layer-label.prepreg { color: var(--pp-bot); }
+    .layer-bar.prepreg {{ background: linear-gradient(180deg, var(--pp-top) 0%, var(--pp-bot) 100%); color: var(--pp-text); }}
+    .layer-label.prepreg {{ color: var(--pp-bot); }}
     
-    .layer-bar.core { background: linear-gradient(180deg, var(--core-top) 0%, var(--core-bot) 100%); color: var(--core-text); }
-    .layer-label.core { color: var(--core-bot); }
+    .layer-bar.core {{ background: linear-gradient(180deg, var(--core-top) 0%, var(--core-bot) 100%); color: var(--core-text); }}
+    .layer-label.core {{ color: var(--core-bot); }}
     
-    .layer-bar.soldermask { background: linear-gradient(180deg, var(--sm-top) 0%, var(--sm-bot) 100%); color: var(--sm-text); }
-    .layer-bar.silkscreen { background: linear-gradient(180deg, var(--ss-top) 0%, var(--ss-bot) 100%); color: var(--ss-text); border: 1px dashed #ccc;}
+    .layer-bar.soldermask {{ background: linear-gradient(180deg, var(--sm-top) 0%, var(--sm-bot) 100%); color: var(--sm-text); }}
+    .layer-bar.silkscreen {{ background: linear-gradient(180deg, var(--ss-top) 0%, var(--ss-bot) 100%); color: var(--ss-text); border: 1px dashed #ccc;}}
     
     /* Vias */
-    .via-zone {
+    .via-zone {{
         position: absolute;
         display: flex;
         flex-direction: column;
         align-items: center;
         z-index: 10;
-    }
+    }}
     
-    .via-barrel {
+    .via-barrel {{
         width: 100%;
         height: 100%;
         background: linear-gradient(90deg, var(--via-l) 0%, var(--via-c) 50%, var(--via-r) 100%);
         position: absolute;
-    }
+    }}
     
-    .via-hole {
+    .via-hole {{
         width: 40%;
         height: 100%;
         background: var(--via-hole);
         position: absolute;
-    }
+    }}
     
-    .via-pad {
+    .via-pad {{
         position: absolute;
         width: 140%;
         height: 4px;
         background: linear-gradient(90deg, var(--via-pad-t) 0%, var(--via-pad-b) 100%);
         box-shadow: 0 1px 2px rgba(0,0,0,0.3);
         border-radius: 1px;
-    }
+    }}
     
-    .via-pad.top { top: -2px; }
-    .via-pad.bot { bottom: -2px; }
+    .via-pad.top {{ top: -2px; }}
+    .via-pad.bot {{ bottom: -2px; }}
     
-    .uvia-barrel {
+    .uvia-barrel {{
         clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%);
-    }
+    }}
     
-    .via-label {
+    .via-label {{
         position: absolute;
         bottom: -25px;
         font-size: 10px;
@@ -134,7 +119,7 @@ def generate_css(palette_name="classic"):
         text-align: center;
         white-space: nowrap;
         font-weight: bold;
-    }
+    }}
     """
     
     # Optional dynamic injections
@@ -157,7 +142,7 @@ def _format_layer_label(layer, show_id=True, show_name=True):
     return " - ".join(part for part in [layer_name, layer_id] if part) or "&nbsp;"
 
 
-def render_html(stackup_data, palette="classic", show_id=True, show_name=True):
+def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, palette_colors=None):
     """
     Generates the complete HTML string for the PCB visual engine.
     """
@@ -169,7 +154,7 @@ def render_html(stackup_data, palette="classic", show_id=True, show_name=True):
     html = f"""
     <html>
     <head>
-        <style>{generate_css(palette)}</style>
+        <style>{generate_css(palette, palette_colors)}</style>
     </head>
     <body>
     <div class="stackup-viewer" data-palette="{palette}">

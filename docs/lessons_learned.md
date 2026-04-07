@@ -36,3 +36,8 @@
 * **Issue:** Re-running a generated HFSS macro can fail or create conflicts if local variables already exist in the design.
 * **Solution:** Use an `add_local_variable(name, value)` helper that checks `oDesign.GetVariables()`, updates existing variables with `oDesign.SetVariableValue(...)`, and creates them only if missing.
 * **Rule:** In AEDT export scripts, local variables should be emitted in create-or-update form, and dielectric references must be defined before metal variables that depend on them.
+
+## Shared Palette HTML/CSS Rendering (Date: 2026-04-07)
+* **Issue:** Converting a CSS template to an f-string caused a runtime `NameError` because literal CSS braces were interpreted as Python expressions.
+* **Solution:** Escape CSS blocks with double braces `{{ ... }}` and inject only the actual palette values from `color_manager.build_render_palette(...)`.
+* **Rule:** When generating HTML/CSS with Python f-strings, always escape literal braces and validate the renderer with a real `render_html(...)` call after the change.
