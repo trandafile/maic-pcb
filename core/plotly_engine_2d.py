@@ -39,7 +39,7 @@ def get_intersection(layer_idx, via, layer_idx_shape_map):
     else:
         return None
 
-def build_2d_figure(stackup_data, show_labels=True, show_left_labels=False):
+def build_2d_figure(stackup_data, show_id=True, show_name=True):
     """
     Constructs the Plotly 2D Cross-section view.
     Y-axis represents layout depth. X-axis dynamically spaces out the Vias.
@@ -140,22 +140,21 @@ def build_2d_figure(stackup_data, show_labels=True, show_left_labels=False):
             showlegend=False
         ))
 
-        # Annotations (Labels)
-        right_lbl_x = x_max - 0.5
+        # Annotations (Labels) - Left side only
         left_lbl_x = x_min + 0.5
-        lbl_text = f"[{layer['id']}] {layer['name']} ({float(z_info['thickness']):.3f}mm)"
         
-        if show_labels:
-            fig.add_annotation(
-                x=right_lbl_x,
-                y=y_top - (z_info['thickness']/2.0),
-                text=lbl_text,
-                showarrow=False,
-                xanchor="right",
-                font=dict(size=11, color="#555")
-            )
-            
-        if show_left_labels:
+        # Build label text based on toggles
+        label_parts = []
+        if show_id:
+            label_parts.append(f"[{layer['id']}]")
+        if show_name:
+            label_parts.append(layer['name'])
+        
+        lbl_text = " ".join(label_parts)
+        if lbl_text:
+            lbl_text += f" ({float(z_info['thickness']):.3f}mm)"
+
+        if show_id or show_name:
             fig.add_annotation(
                 x=left_lbl_x,
                 y=y_top - (z_info['thickness']/2.0),
@@ -224,10 +223,10 @@ def build_2d_figure(stackup_data, show_labels=True, show_left_labels=False):
             showlegend=False
         ))
 
-        if show_labels:
+        if show_id or show_name:
             fig.add_annotation(
                 x=x_pos,
-                y=true_top_y + (abs(true_top_y)*0.02 + 0.1), 
+                y=true_top_y + (abs(true_top_y)*0.02 + 0.1),
                 text=f"{via['id']}",
                 showarrow=False,
                 textangle=0,

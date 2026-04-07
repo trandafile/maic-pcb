@@ -190,12 +190,6 @@ def generate_hfss_script(stackup_data):
                                        z_val=d_id + '_low')
         )
 
-        # Organize variables under StackUp separator
-        if box_counter == 1:
-            script_lines.append(
-                _gen_stackup_separator_and_reorg(d_id, dielectric_layers_bottom_up, layer_info)
-            )
-
         # Update current_z for next dielectric
         current_z = d_high
 
@@ -307,16 +301,92 @@ def generate_hfss_script(stackup_data):
             'high_expr': m_high_expr
         }
 
-        script_lines.append(f'# {m_id} metal layer variables')
-        script_lines.append(
-            _gen_change_property_local_var(m_id + '_low', m_low_expr)
-        )
-        script_lines.append(
-            _gen_change_property_local_var(m_id + '_h', _format_thickness(m_thick))
-        )
-        script_lines.append(
-            _gen_change_property_local_var(m_id + '_high', m_high_expr)
-        )
+    # Now generate the StackUp separator with ALL metal variables together
+    # This matches the ScriptDielPCB.py structure exactly
+    if metal_layers_bottom_up or dielectric_layers_bottom_up:
+        lines = []
+        lines.append('oDesign.ChangeProperty(')
+        lines.append('    [')
+        lines.append('        "NAME:AllTabs",')
+        lines.append('        [')
+        lines.append('            "NAME:LocalVariableTab",')
+        lines.append('            [')
+        lines.append('                "NAME:PropServers",')
+        lines.append('                "LocalVariables"')
+        lines.append('            ],')
+        lines.append('            [')
+        lines.append('                "NAME:NewProps",')
+        lines.append('                [')
+        lines.append('                    "NAME:StackUp",')
+        lines.append('                    "PropType:="        , "SeparatorProp",')
+        lines.append('                    "UserDef:="         , True,')
+        lines.append('                    "Value:="           , ""')
+        lines.append('                ],')
+
+        # Add all metal layer variables to NewProps
+        all_metal_vars = []
+        for m_layer in metal_layers_bottom_up:
+            m_id = m_layer['id']
+            m_info = layer_info[m_id]
+            all_metal_vars.append((f'{m_id}_low', m_info['low_expr'], 'VariableProp'))
+            all_metal_vars.append((f'{m_id}_h', _format_thickness(m_info['h']), 'VariableProp'))
+            all_metal_vars.append((f'{m_id}_high', m_info['high_expr'], 'VariableProp'))
+
+        # Add dielectric _h variables to NewProps
+        for d_layer in dielectric_layers_bottom_up:
+            d_id = d_layer['id']
+            all_metal_vars.append((f'{d_id}_h', _format_thickness(layer_info[d_id]['h']), 'VariableProp'))
+
+        # Add all variables with proper comma handling
+        for i, (var_name, var_value, var_type) in enumerate(all_metal_vars):
+            is_last = (i == len(all_metal_vars) - 1)
+            lines.append('                [')
+            lines.append(f'                    "NAME:{var_name}",')
+            lines.append(f'                    "PropType:="        , "{var_type}",')
+            lines.append('                    "UserDef:="         , True,')
+            lines.append(f'                    "Value:="           , "{var_value}"')
+            if is_last:
+                lines.append('                ]')
+            else:
+                lines.append('                ],')
+
+        lines.append('            ],')
+        lines.append('            [')
+        lines.append('                "NAME:ChangedProps",')
+        lines.append('                [')
+        lines.append('                    "NAME:StackUp",')
+        lines.append('                    "NewRowPosition:=" , 0')
+        lines.append('                ],')
+
+        # Add D_high re-expression and D_h repositioning for each dielectric
+        changed_props_items = []
+        for d_layer in dielectric_layers_bottom_up:
+            d_id = d_layer['id']
+            changed_props_items.append((f'{d_id}_high', f'"Value:="           , "{d_id}_low+{d_id}_h"'))
+            changed_props_items.append((f'{d_id}_h', f'"NewRowPosition:=" , 5'))
+
+        for i, (var_name, prop_line) in enumerate(changed_props_items):
+            is_last = (i == len(changed_props_items) - 1)
+            lines.append('                [')
+            lines.append(f'                    "NAME:{var_name}",')
+            lines.append(f'                    {prop_line}')
+            if is_last:
+                lines.append('                ]')
+            else:
+                lines.append('                ],')
+
+        lines.append('            ]')
+        lines.append('        ]')
+        lines.append('    ]')
+        lines.append('])')
+        
+        # Debug: count brackets
+        debug_opens = sum(l.count('[') for l in lines)
+        debug_closes = sum(l.count(']') for l in lines)
+        if debug_opens != debug_closes:
+            print(f"WARNING: StackUp section has {debug_opens} [ but {debug_closes} ]")
+        
+        script_lines.extend(lines)
         script_lines.append('')
 
     return '\n'.join(script_lines)
@@ -467,14 +537,7 @@ def _gen_stackup_separator_and_reorg(current_d_id, dielectric_layers, layer_info
     lines.append('                    "PropType:="		, "SeparatorProp",')
     lines.append('                    "UserDef:="		, True,')
     lines.append('                    "Value:="		, ""')
-    lines.append('                ],')
-
-    # Add metal layer variables if they exist
-    first_d_idx = None
-    for i, dl in enumerate(dielectric_layers):
-        if dl['id'] == current_d_id:
-            first_d_idx = i
-            break
+    lines.append('                ]')
 
     # We will add all variables after the separator is created
     lines.append('            ],')

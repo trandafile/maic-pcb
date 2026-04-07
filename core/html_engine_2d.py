@@ -141,7 +141,7 @@ def generate_css(palette_name="classic"):
     css = palettes_css.replace('var(--cu-top)', 'var(--cu-top)')
     return css
 
-def render_html(stackup_data, palette="classic"):
+def render_html(stackup_data, palette="classic", show_id=True, show_name=True):
     """
     Generates the complete HTML string for the PCB visual engine.
     """
@@ -195,10 +195,19 @@ def render_html(stackup_data, palette="classic"):
         })
         
         current_y += px_h
+
+        # Build label based on toggles
+        label_parts = []
+        if show_id:
+            label_parts.append(f"[{layer.get('id', str(idx))}]")
+        if show_name:
+            label_parts.append(name)
         
+        label_text = " ".join(label_parts) if label_parts else "&nbsp;"
+
         html += f"""
             <div class="layer-row" style="height:{px_h}px">
-                <div class="layer-label {css_type}">[{layer.get('id', str(idx))}] {name}</div>
+                <div class="layer-label {css_type}">{label_text}</div>
                 <div class="layer-bar {css_type}">{layer.get('material_ref', '')}</div>
                 <div class="layer-dim">{thick_mm:.3f} mm</div>
             </div>

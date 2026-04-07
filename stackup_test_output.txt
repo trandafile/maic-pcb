@@ -1,0 +1,83 @@
+oDesign.ChangeProperty(
+    [
+        "NAME:AllTabs",
+        [
+            "NAME:LocalVariableTab",
+            [
+                "NAME:PropServers",
+                "LocalVariables"
+            ],
+            [
+                "NAME:NewProps",
+                [
+                    "NAME:StackUp",
+                    "PropType:="        , "SeparatorProp",
+                    "UserDef:="         , True,
+                    "Value:="           , ""
+                ],
+                [
+                    "NAME:L1_low",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "D1_high"
+                ],
+                [
+                    "NAME:L1_h",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "35.00um"
+                ],
+                [
+                    "NAME:L1_high",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "D1_high+L1_h"
+                ],
+                [
+                    "NAME:L2_low",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "D1_low-L1_h"
+                ],
+                [
+                    "NAME:L2_h",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "35.00um"
+                ],
+                [
+                    "NAME:L2_high",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "D1_low"
+                ],
+                [
+                    "NAME:D1_h",
+                    "PropType:="        , "VariableProp",
+                    "UserDef:="         , True,
+                    "Value:="           , "1.5000mm"
+                ]
+            ],
+            [
+                "NAME:ChangedProps",
+                [
+                    "NAME:StackUp",
+                    "NewRowPosition:=" , 0
+                ],
+                [
+                    "NAME:D1_high",
+                    "Value:="           , "D1_low+D1_h"
+                ],
+                [
+                    "NAME:D1_h",
+                    "NewRowPosition:=" , 5
+                ]
+            ]
+        ]
+    ]
+])
+
+
+Total lines: 78
+Opening [: 16
+Closing ]: 17

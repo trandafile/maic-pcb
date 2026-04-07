@@ -62,11 +62,11 @@ def init_session_state():
         }
     
     # UI Toggles and Controls State Initialization
-    if 'show_labels' not in st.session_state:
-        st.session_state['show_labels'] = True
-    
-    if 'show_left_labels' not in st.session_state:
-        st.session_state['show_left_labels'] = False
+    if 'show_id' not in st.session_state:
+        st.session_state['show_id'] = True
+
+    if 'show_name' not in st.session_state:
+        st.session_state['show_name'] = True
     
     if 'view_mode' not in st.session_state:
         st.session_state['view_mode'] = '2D Cross-Section'
@@ -86,17 +86,17 @@ def build_sidebar():
             auth.logout()
         
     st.sidebar.divider()
-    
-    st.session_state['show_labels'] = st.sidebar.toggle(
-        "Show Right Labels", 
-        value=st.session_state.get('show_labels', True),
-        help="Toggle layer and via dimensional labels on the right."
+
+    st.session_state['show_id'] = st.sidebar.toggle(
+        "Show ID",
+        value=st.session_state.get('show_id', True),
+        help="Toggle layer ID display on the left side."
     )
-    
-    st.session_state['show_left_labels'] = st.sidebar.toggle(
-        "Show Left Labels", 
-        value=st.session_state.get('show_left_labels', False),
-        help="Toggle layer thickness annotations on the left side."
+
+    st.session_state['show_name'] = st.sidebar.toggle(
+        "Show Name",
+        value=st.session_state.get('show_name', True),
+        help="Toggle layer name display on the left side."
     )
     
     st.session_state['view_mode'] = st.sidebar.radio(
