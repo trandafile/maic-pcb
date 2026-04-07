@@ -274,13 +274,14 @@ def render():
         )
         selected_idx = next((i for i, layer in enumerate(layers) if layer['id'] == selected_layer_id), 0)
         selected_layer = layers[selected_idx]
+        edit_key_prefix = f"edit_layer_{selected_layer.get('id', selected_idx)}"
 
         st.caption(f"Editing layer: `[{selected_layer.get('id', '?')}] {selected_layer.get('name', 'Unnamed Layer')}`")
 
         edited_layer = _render_layer_inputs(
             df_lib=df_lib,
             defaults=selected_layer,
-            key_prefix="edit_layer",
+            key_prefix=edit_key_prefix,
             id_default=selected_layer.get("id", f"L{selected_idx + 1}"),
         )
 
