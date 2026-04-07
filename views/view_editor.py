@@ -1,4 +1,5 @@
 import ast
+import re
 
 import pandas as pd
 import streamlit as st
@@ -79,7 +80,61 @@ def _parse_thicknesses(raw_value):
 
 
 def _default_color_for_type(layer_type):
-    return "#CC5500" if layer_type == "copper" else "#708090"
+    if layer_type == "copper":
+        return "#CC5500"
+    if layer_type in {"soldermask", "cover"}:
+        return "#2E8B57"
+    return "#708090"
+
+
+def _normalize_hex_color(value, fallback):
+    color = str(value or "").strip()
+    if not color:
+        color = fallback
+
+    if not color.startswith("#"):
+        color = f"#{color}"
+
+    if re.fullmatch(r"#[0-9a-fA-F]{3}", color):
+        color = "#" + "".join(ch * 2 for ch in color[1:])
+
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        color = fallback
+
+    return color.upper()
+
+
+def _get_color_presets(layer_type):
+    if layer_type == "copper":
+        return [
+            ("Copper Orange", "#CC5500"),
+            ("Coral Copper", "#FF7F50"),
+            ("Bronze", "#B87333"),
+            ("Amber", "#D67D3E"),
+        ]
+
+    if layer_type in {"core", "prepreg", "dielectric"}:
+        return [
+            ("Slate Gray", "#708090"),
+            ("Muted Olive", "#556B2F"),
+            ("Dust Blue", "#5F7180"),
+            ("Moss", "#6B7D5C"),
+        ]
+
+    return [
+        ("Soldermask Green", "#2E8B57"),
+        ("Teal", "#3B7A78"),
+        ("Slate Gray", "#708090"),
+        ("Muted Olive", "#556B2F"),
+    ]
+
+
+def _find_best_color_preset_index(presets, current_color):
+    normalized = _normalize_hex_color(current_color, presets[0][1])
+    for idx, (_, hex_value) in enumerate(presets):
+        if _normalize_hex_color(hex_value, presets[0][1]) == normalized:
+            return idx
+    return 0
 
 
 def _resolve_layer_type(cat_gui, selected_row):
@@ -179,7 +234,16 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
 
     final_type = _resolve_layer_type(cat_gui, selected_row or {})
 
-    c4, c5, c6 = st.columns(3)
+    current_color = _normalize_hex_color(
+        defaults.get("color_hex"),
+        _default_color_for_type(final_type),
+    )
+    color_presets = _get_color_presets(final_type)
+    preset_labels = [f"{name} ({hex_value})" for name, hex_value in color_presets]
+    preset_map = dict(zip(preset_labels, [hex_value for _, hex_value in color_presets]))
+    preset_index = _find_best_color_preset_index(color_presets, current_color)
+
+    c4, c5 = st.columns(2)
     with c4:
         layer_id = st.text_input(
             "Layer ID (e.g. L1, D1)",
@@ -192,12 +256,36 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
             value=str(defaults.get("name") or "New Layer"),
             key=f"{key_prefix}_name",
         )
+
+    c6, c7 = st.columns([1.2, 1])
     with c6:
-        color_hex = st.text_input(
-            "Color Hex",
-            value=str(defaults.get("color_hex") or _default_color_for_type(final_type)),
-            key=f"{key_prefix}_color_hex",
+        selected_preset_label = st.selectbox(
+            "Preset Color",
+            preset_labels,
+            index=preset_index,
+            key=f"{key_prefix}_color_preset",
+            help="Choose from the recommended technical palette.",
         )
+        preset_color = preset_map[selected_preset_label]
+
+    with c7:
+        use_custom_color = st.toggle(
+            "Use custom color / hex",
+            value=current_color not in preset_map.values(),
+            key=f"{key_prefix}_use_custom_color",
+            help="Enable a free color picker with editable hex value.",
+        )
+        color_hex = st.color_picker(
+            "Custom Color",
+            value=current_color if use_custom_color else preset_color,
+            key=f"{key_prefix}_color_picker",
+            disabled=not use_custom_color,
+        )
+
+    final_color = _normalize_hex_color(
+        color_hex if use_custom_color else preset_color,
+        _default_color_for_type(final_type),
+    )
 
     return {
         "id": layer_id.strip(),
@@ -205,7 +293,7 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
         "type": final_type,
         "thickness": float(thickness_val),
         "material_ref": selected_mat_str,
-        "color_hex": color_hex.strip() or _default_color_for_type(final_type),
+        "color_hex": final_color,
     }
 
 
@@ -259,8 +347,8 @@ def render():
         if not new_layer["id"]:
             st.error("Layer ID is required.")
         else:
-            st.session_state['stackup_data']['layers'].append(new_layer)
-            st.toast(f"✅ Layer {new_layer['id']} added")
+            st.session_state['stackup_data']['layers'].insert(0, new_layer)
+            st.toast(f"✅ Layer {new_layer['id']} added on top of stack")
             st.rerun()
 
     st.markdown("### ✏️ Edit Existing Layer")
