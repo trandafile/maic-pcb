@@ -1,7 +1,24 @@
 import plotly.graph_objects as go
 import numpy as np
 
-def build_3d_figure(stackup_data, explosion_factor):
+
+def format_layer_label(layer, show_id=True, show_name=True):
+    """Format a layer label using the active ID/name toggles."""
+    layer_id = str(layer.get('id', '')).strip()
+    layer_name = str(layer.get('name', '')).strip()
+
+    parts = []
+    if show_id and layer_id:
+        parts.append(layer_id)
+    if show_name and layer_name:
+        parts.append(layer_name)
+
+    if parts:
+        return " - ".join(parts)
+    return " - ".join(part for part in [layer_id, layer_name] if part) or "Layer"
+
+
+def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True):
     """
     Renders the PCB Stack-up as a 3D Plotly Graph Object models.
     """
@@ -44,17 +61,32 @@ def build_3d_figure(stackup_data, explosion_factor):
         j_tris = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3]
         k_tris = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6]
         
+        hover_label = format_layer_label(layer, show_id=True, show_name=True)
+        visible_label = format_layer_label(layer, show_id=show_id, show_name=show_name)
+
         fig.add_trace(go.Mesh3d(
             x=x, y=y, z=z,
             i=i_tris, j=j_tris, k=k_tris,
             color=color,
             opacity=opacity,
-            name=f"[{layer['id']}] {layer.get('name', 'Layer')}",
+            name=visible_label,
             hoverinfo="name+text",
-            hovertext=f"[{layer['id']}] {layer.get('name', 'Layer')}<br>Type: {l_type}<br>Thickness: {thickness}mm",
+            hovertext=f"{hover_label}<br>Type: {l_type}<br>Thickness: {thickness}mm",
             flatshading=True
         ))
-        
+
+        if visible_label:
+            fig.add_trace(go.Scatter3d(
+                x=[width / 2.0],
+                y=[length / 2.0],
+                z=[z_top + max(0.06, explosion_factor * 0.08 + 0.02)],
+                mode="text",
+                text=[visible_label],
+                textfont=dict(size=12, color="#222222"),
+                hoverinfo="skip",
+                showlegend=False
+            ))
+
         current_z -= thickness
         
     # Draw Vias

@@ -31,3 +31,8 @@
 * **Issue:** The exported AEDT script broke with a bracket mismatch caused by manually assembling deeply nested `ChangeProperty` lists.
 * **Solution:** Generate smaller, reusable helper calls (`add_local_variable`, `add_separator`, `create_dielectric_box`) instead of one giant nested block.
 * **Rule:** For HFSS/AEDT exports, prefer compact helper-based Python output and always verify the generated script with `compile(...)` before considering the export complete.
+
+## HFSS Variable Re-run Safety (Date: 2026-04-07)
+* **Issue:** Re-running a generated HFSS macro can fail or create conflicts if local variables already exist in the design.
+* **Solution:** Use an `add_local_variable(name, value)` helper that checks `oDesign.GetVariables()`, updates existing variables with `oDesign.SetVariableValue(...)`, and creates them only if missing.
+* **Rule:** In AEDT export scripts, local variables should be emitted in create-or-update form, and dielectric references must be defined before metal variables that depend on them.

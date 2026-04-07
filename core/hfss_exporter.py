@@ -331,35 +331,130 @@ def generate_hfss_script(
         'oProject = oDesktop.GetActiveProject()' if not project_name else f'oProject = oDesktop.SetActiveProject("{_escape_python_string(project_name)}")',
         "# Capture the currently active design inside that project",
         'oDesign = oProject.GetActiveDesign()' if not design_name else f'oDesign = oProject.SetActiveDesign("{_escape_python_string(design_name)}")',
+        "# Activate the 3D modeler for that design",
         'oEditor = oDesign.SetActiveEditor("3D Modeler")',
         "",
+        "def add_local_variable(name, value):",
+        "    existing_vars = []",
+        "    try:",
+        "        existing_vars = list(oDesign.GetVariables())",
+        "    except Exception:",
+        "        existing_vars = []",
+        "",
+        "    if name in existing_vars:",
+        "        try:",
+        "            oDesign.SetVariableValue(name, value)",
+        "        except Exception:",
+        "            oDesign.ChangeProperty(",
+        "                [",
+        '                    "NAME:AllTabs",',
+        "                    [",
+        '                        "NAME:LocalVariableTab",',
+        '                        ["NAME:PropServers", "LocalVariables"],',
+        "                        [",
+        '                            "NAME:ChangedProps",',
+        "                            [",
+        '                                "NAME:" + name,',
+        '                                "Value:=", value,',
+        "                            ],",
+        "                        ],",
+        "                    ],",
+        "                ]",
+        "            )",
+        "    else:",
+        "        oDesign.ChangeProperty(",
+        "            [",
+        '                "NAME:AllTabs",',
+        "                [",
+        '                    "NAME:LocalVariableTab",',
+        '                    ["NAME:PropServers", "LocalVariables"],',
+        "                    [",
+        '                        "NAME:NewProps",',
+        "                        [",
+        '                            "NAME:" + name,',
+        '                            "PropType:=", "VariableProp",',
+        '                            "UserDef:=", True,',
+        '                            "Value:=", value,',
+        "                        ],",
+        "                    ],",
+        "                ],",
+        "            ]",
+        "        )",
+        "",
+        "def ensure_separator(name):",
+        "    try:",
+        '        existing_props = list(oDesign.GetProperties("LocalVariableTab", "LocalVariables"))',
+        "    except Exception:",
+        "        existing_props = []",
+        "",
+        "    if name not in existing_props:",
+        "        oDesign.ChangeProperty(",
+        "            [",
+        '                "NAME:AllTabs",',
+        "                [",
+        '                    "NAME:LocalVariableTab",',
+        '                    ["NAME:PropServers", "LocalVariables"],',
+        "                    [",
+        '                        "NAME:NewProps",',
+        "                        [",
+        '                            "NAME:" + name,',
+        '                            "PropType:=", "SeparatorProp",',
+        '                            "UserDef:=", True,',
+        '                            "Value:=", "",',
+        "                        ],",
+        "                    ],",
+        "                ],",
+        "            ]",
+        "        )",
+        "",
+        "def create_dielectric_box(name, z_position, z_size, material_name, color_rgb, transparency=0.35):",
+        "    oEditor.CreateBox(",
+        "        [",
+        '            "NAME:BoxParameters",',
+        '            "XPosition:=", "-dielX/2",',
+        '            "YPosition:=", "-dielY/2",',
+        '            "ZPosition:=", z_position,',
+        '            "XSize:=", "dielX",',
+        '            "YSize:=", "dielY",',
+        '            "ZSize:=", z_size,',
+        "        ],",
+        "        [",
+        '            "NAME:Attributes",',
+        '            "Name:=", name,',
+        '            "Flags:=", "",',
+        '            "Color:=", color_rgb,',
+        '            "Transparency:=", transparency,',
+        '            "PartCoordinateSystem:=", "Global",',
+        '            "UDMId:=", "",',
+        '            "MaterialValue:=", "\\\"{}\\\"".format(material_name),',
+        '            "SurfaceMaterialValue:=", "\\"\\"",',
+        '            "SolveInside:=", True,',
+        '            "ShellElement:=", False,',
+        '            "ShellElementThickness:=", "0mm",',
+        '            "ReferenceTemperature:=", "20cel",',
+        '            "IsMaterialEditable:=", True,',
+        '            "UseMaterialAppearance:=", False,',
+        '            "IsLightweight:=", False,',
+        "        ],",
+        "    )",
+        "",
         "# Global stack-up variables",
+        'ensure_separator("PCB_stack_up")',
+        f'add_local_variable("dielX", "{_escape_python_string(diel_x)}")',
+        f'add_local_variable("dielY", "{_escape_python_string(diel_y)}")',
+        "",
+        "# Z = 0 at the base of the lowest dielectric",
+        "# 1) Define dielectric variables first",
     ]
-
-    lines.extend(
-        _build_change_property_block(
-            [
-                {"name": "dielX", "value": _escape_python_string(diel_x)},
-                {"name": "dielY", "value": _escape_python_string(diel_y)},
-            ],
-            separator_name="PCB_stack_up",
-        )
-    )
-    lines.append("")
-    lines.append("# Z = 0 at the base of the lowest dielectric")
-    lines.append("# 1) Define dielectric variables first")
 
     for entry in layer_definitions:
         if entry["family"] == "metal":
             continue
 
         lines.append(f"# [{entry['raw_id']}] {entry['name']}")
-        props = [
-            {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
-            {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
-            {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
-        ]
-        lines.extend(_build_change_property_block(props))
+        lines.append(f'add_local_variable("{entry["id"]}_low", "{entry["low_expr"]}")')
+        lines.append(f'add_local_variable("{entry["id"]}_h", "{entry["h_expr"]}")')
+        lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
         lines.append("")
 
     lines.append("# 2) Define metal variables after dielectric references exist")
@@ -371,18 +466,13 @@ def generate_hfss_script(
         lines.append(f"# [{entry['raw_id']}] {entry['name']}")
         lines.append(f"# {entry['logic_note']}")
         if entry["direction"] == "down":
-            props = [
-                {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
-                {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
-                {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
-            ]
+            lines.append(f'add_local_variable("{entry["id"]}_h", "{entry["h_expr"]}")')
+            lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
+            lines.append(f'add_local_variable("{entry["id"]}_low", "{entry["low_expr"]}")')
         else:
-            props = [
-                {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
-                {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
-                {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
-            ]
-        lines.extend(_build_change_property_block(props))
+            lines.append(f'add_local_variable("{entry["id"]}_low", "{entry["low_expr"]}")')
+            lines.append(f'add_local_variable("{entry["id"]}_h", "{entry["h_expr"]}")')
+            lines.append(f'add_local_variable("{entry["id"]}_high", "{entry["high_expr"]}")')
         lines.append("")
 
     lines.append("# 3) Create dielectric boxes using dielX and dielY")
@@ -392,7 +482,10 @@ def generate_hfss_script(
             continue
 
         lines.append(f"# Create dielectric box for [{entry['raw_id']}] {entry['name']}")
-        lines.extend(_build_create_box_block(entry))
+        lines.append(
+            f'create_dielectric_box("{entry["id"]}_box", "{entry["id"]}_low", "{entry["id"]}_h", '
+            f'"{entry["material_name"]}", "{entry["color_rgb"]}", transparency={entry["transparency"]})'
+        )
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

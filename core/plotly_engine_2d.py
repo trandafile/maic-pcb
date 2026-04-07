@@ -1,5 +1,22 @@
 import plotly.graph_objects as go
 
+
+def format_layer_label(layer, show_id=True, show_name=True):
+    """Format a layer label using the active ID/name toggles."""
+    layer_id = str(layer.get('id', '')).strip()
+    layer_name = str(layer.get('name', '')).strip()
+
+    parts = []
+    if show_id and layer_id:
+        parts.append(layer_id)
+    if show_name and layer_name:
+        parts.append(layer_name)
+
+    if parts:
+        return " - ".join(parts)
+    return " - ".join(part for part in [layer_id, layer_name] if part) or "Layer"
+
+
 def calculate_z_map(layers):
     """
     Calculate the top and bottom Y coordinates (depth) for each layer.
@@ -129,6 +146,9 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
                 opacity=opacity
             )
             
+        hover_label = format_layer_label(layer, show_id=True, show_name=True)
+        visible_label = format_layer_label(layer, show_id=show_id, show_name=show_name)
+
         fig.add_trace(go.Scatter(
             x=[x_min, x_max, x_max, x_min, x_min],
             y=[y_bottom, y_bottom, y_top, y_top, y_bottom],
@@ -136,21 +156,14 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
             fillcolor=color,
             opacity=0.0,
             hoverinfo="text",
-            text=f"<b>[{layer['id']}] {layer['name']}</b> ({layer['type']})<br>Thick: {z_info['thickness']}mm",
+            text=f"<b>{hover_label}</b> ({layer['type']})<br>Thick: {z_info['thickness']}mm",
             showlegend=False
         ))
 
         # Annotations (Labels) - Left side only
         left_lbl_x = x_min + 0.5
-        
-        # Build label text based on toggles
-        label_parts = []
-        if show_id:
-            label_parts.append(f"[{layer['id']}]")
-        if show_name:
-            label_parts.append(layer['name'])
-        
-        lbl_text = " ".join(label_parts)
+
+        lbl_text = visible_label
         if lbl_text:
             lbl_text += f" ({float(z_info['thickness']):.3f}mm)"
 

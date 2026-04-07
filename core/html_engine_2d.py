@@ -141,6 +141,22 @@ def generate_css(palette_name="classic"):
     css = palettes_css.replace('var(--cu-top)', 'var(--cu-top)')
     return css
 
+def _format_layer_label(layer, show_id=True, show_name=True):
+    """Format a layer label using `ID - Name` when both toggles are enabled."""
+    layer_id = str(layer.get('id', '')).strip()
+    layer_name = str(layer.get('name', '')).strip()
+
+    parts = []
+    if show_id and layer_id:
+        parts.append(layer_id)
+    if show_name and layer_name:
+        parts.append(layer_name)
+
+    if parts:
+        return " - ".join(parts)
+    return " - ".join(part for part in [layer_id, layer_name] if part) or "&nbsp;"
+
+
 def render_html(stackup_data, palette="classic", show_id=True, show_name=True):
     """
     Generates the complete HTML string for the PCB visual engine.
@@ -196,14 +212,7 @@ def render_html(stackup_data, palette="classic", show_id=True, show_name=True):
         
         current_y += px_h
 
-        # Build label based on toggles
-        label_parts = []
-        if show_id:
-            label_parts.append(f"[{layer.get('id', str(idx))}]")
-        if show_name:
-            label_parts.append(name)
-        
-        label_text = " ".join(label_parts) if label_parts else "&nbsp;"
+        label_text = _format_layer_label(layer, show_id=show_id, show_name=show_name)
 
         html += f"""
             <div class="layer-row" style="height:{px_h}px">

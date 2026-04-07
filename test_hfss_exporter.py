@@ -32,12 +32,12 @@ class TestHfssExporter(unittest.TestCase):
 
         script = generate_hfss_script(stackup_data)
 
-        self.assertIn('"NAME:PCB_stack_up"', script)
-        self.assertIn('"NAME:dielX"', script)
-        self.assertIn('"NAME:dielY"', script)
-        self.assertNotIn('"NAME:PCB_variables"', script)
-        self.assertNotIn('"NAME:DielX"', script)
-        self.assertNotIn('"NAME:DielY"', script)
+        self.assertIn('ensure_separator("PCB_stack_up")', script)
+        self.assertIn('add_local_variable("dielX", "10mm")', script)
+        self.assertIn('add_local_variable("dielY", "10mm")', script)
+        self.assertNotIn('PCB_variables', script)
+        self.assertNotIn('add_local_variable("DielX"', script)
+        self.assertNotIn('add_local_variable("DielY"', script)
 
     def test_matches_hfss_recorder_style_blocks(self):
         stackup_data = {
@@ -51,10 +51,11 @@ class TestHfssExporter(unittest.TestCase):
 
         script = generate_hfss_script(stackup_data)
 
+        self.assertIn('def add_local_variable(name, value):', script)
+        self.assertIn('oDesign.SetVariableValue(name, value)', script)
         self.assertIn('oDesign.ChangeProperty(', script)
+        self.assertIn('def create_dielectric_box(name, z_position, z_size, material_name, color_rgb, transparency=0.35):', script)
         self.assertIn('oEditor.CreateBox(', script)
-        self.assertNotIn('def add_local_variable', script)
-        self.assertNotIn('def create_dielectric_box', script)
 
     def test_defines_dielectric_variables_before_dependent_metal_variables(self):
         stackup_data = {
@@ -68,8 +69,8 @@ class TestHfssExporter(unittest.TestCase):
 
         script = generate_hfss_script(stackup_data)
 
-        self.assertLess(script.index('"NAME:D1_low"'), script.index('"NAME:L1_high"'))
-        self.assertLess(script.index('"NAME:D1_high"'), script.index('"NAME:L2_low"'))
+        self.assertLess(script.index('add_local_variable("D1_low"'), script.index('add_local_variable("L1_high"'))
+        self.assertLess(script.index('add_local_variable("D1_high"'), script.index('add_local_variable("L2_low"'))
 
     def test_generated_script_is_valid_python_and_builds_dielectric_boxes(self):
         stackup_data = {
@@ -84,15 +85,13 @@ class TestHfssExporter(unittest.TestCase):
         script = generate_hfss_script(stackup_data)
         compile(script, "pcb_stackup_hfss.py", "exec")
 
-        self.assertIn('"NAME:D1_low"', script)
-        self.assertIn('"NAME:D1_h"', script)
-        self.assertIn('"NAME:D1_high"', script)
-        self.assertIn('oEditor.CreateBox(', script)
-        self.assertIn('"Name:="             , "D1_box"', script)
-        self.assertIn('"NAME:L1_high"', script)
-        self.assertIn('"Value:="           , "D1_low"', script)
-        self.assertIn('"NAME:L2_low"', script)
-        self.assertIn('"Value:="           , "D1_high"', script)
+        self.assertIn('add_local_variable("D1_low", "0mm")', script)
+        self.assertIn('add_local_variable("D1_h", "1.5mm")', script)
+        self.assertIn('add_local_variable("D1_high", "D1_low+D1_h")', script)
+        self.assertIn('create_dielectric_box("D1_box", "D1_low", "D1_h"', script)
+        self.assertIn('add_local_variable("L1_high", "D1_low")', script)
+        self.assertIn('add_local_variable("L1_low", "L1_high-L1_h")', script)
+        self.assertIn('add_local_variable("L2_low", "D1_high")', script)
 
     def test_handles_prepreg_core_penetration_rule(self):
         stackup_data = {
@@ -107,11 +106,9 @@ class TestHfssExporter(unittest.TestCase):
         script = generate_hfss_script(stackup_data)
         compile(script, "pcb_stackup_hfss.py", "exec")
 
-        self.assertIn('"NAME:D2_low"', script)
-        self.assertIn('"NAME:L2_high"', script)
-        self.assertIn('"Value:="           , "D2_low"', script)
-        self.assertIn('"NAME:L2_low"', script)
-        self.assertIn('"Value:="           , "L2_high-L2_h"', script)
+        self.assertIn('add_local_variable("D2_low", "D1_high")', script)
+        self.assertIn('add_local_variable("L2_high", "D2_low")', script)
+        self.assertIn('add_local_variable("L2_low", "L2_high-L2_h")', script)
 
 
 if __name__ == "__main__":
