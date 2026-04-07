@@ -327,12 +327,10 @@ def generate_hfss_script(
         "import ScriptEnv",
         'ScriptEnv.Initialize("Ansoft.ElectronicsDesktop")',
         "oDesktop.RestoreWindow()",
-        f'oProject = oDesktop.SetActiveProject("{_escape_python_string(project_name)}")' if project_name else 'oProject = oDesktop.GetActiveProject()',
-        'if oProject is None:',
-        '    raise Exception("Loading project failed: no active AEDT project.")',
-        f'oDesign = oProject.SetActiveDesign("{_escape_python_string(design_name)}")' if design_name else 'oDesign = oProject.GetActiveDesign()',
-        'if oDesign is None:',
-        '    raise Exception("Loading HFSS design failed: no active AEDT design.")',
+        "# Capture the currently active project in AEDT",
+        'oProject = oDesktop.GetActiveProject()' if not project_name else f'oProject = oDesktop.SetActiveProject("{_escape_python_string(project_name)}")',
+        "# Capture the currently active design inside that project",
+        'oDesign = oProject.GetActiveDesign()' if not design_name else f'oDesign = oProject.SetActiveDesign("{_escape_python_string(design_name)}")',
         'oEditor = oDesign.SetActiveEditor("3D Modeler")',
         "",
         "# Global stack-up variables",
@@ -349,34 +347,52 @@ def generate_hfss_script(
     )
     lines.append("")
     lines.append("# Z = 0 at the base of the lowest dielectric")
+    lines.append("# 1) Define dielectric variables first")
 
     for entry in layer_definitions:
-        lines.append(f"# [{entry['raw_id']}] {entry['name']}")
-
         if entry["family"] == "metal":
-            lines.append(f"# {entry['logic_note']}")
-            if entry["direction"] == "down":
-                props = [
-                    {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
-                    {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
-                    {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
-                ]
-            else:
-                props = [
-                    {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
-                    {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
-                    {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
-                ]
-            lines.extend(_build_change_property_block(props))
+            continue
+
+        lines.append(f"# [{entry['raw_id']}] {entry['name']}")
+        props = [
+            {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
+            {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
+            {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
+        ]
+        lines.extend(_build_change_property_block(props))
+        lines.append("")
+
+    lines.append("# 2) Define metal variables after dielectric references exist")
+
+    for entry in layer_definitions:
+        if entry["family"] != "metal":
+            continue
+
+        lines.append(f"# [{entry['raw_id']}] {entry['name']}")
+        lines.append(f"# {entry['logic_note']}")
+        if entry["direction"] == "down":
+            props = [
+                {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
+                {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
+                {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
+            ]
         else:
             props = [
                 {"name": f"{entry['id']}_low", "value": entry["low_expr"]},
                 {"name": f"{entry['id']}_h", "value": entry["h_expr"]},
                 {"name": f"{entry['id']}_high", "value": entry["high_expr"]},
             ]
-            lines.extend(_build_change_property_block(props))
-            lines.extend(_build_create_box_block(entry))
+        lines.extend(_build_change_property_block(props))
+        lines.append("")
 
+    lines.append("# 3) Create dielectric boxes using dielX and dielY")
+
+    for entry in layer_definitions:
+        if entry["family"] == "metal":
+            continue
+
+        lines.append(f"# Create dielectric box for [{entry['raw_id']}] {entry['name']}")
+        lines.extend(_build_create_box_block(entry))
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

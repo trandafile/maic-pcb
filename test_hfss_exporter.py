@@ -56,6 +56,21 @@ class TestHfssExporter(unittest.TestCase):
         self.assertNotIn('def add_local_variable', script)
         self.assertNotIn('def create_dielectric_box', script)
 
+    def test_defines_dielectric_variables_before_dependent_metal_variables(self):
+        stackup_data = {
+            "layers": [
+                {"id": "L2", "name": "Top", "type": "metal", "thickness": 0.035, "material_ref": "Generic Copper"},
+                {"id": "D1", "name": "Core", "type": "core", "thickness": 0.2, "material_ref": "FR4"},
+                {"id": "L1", "name": "Bottom", "type": "metal", "thickness": 0.035, "material_ref": "Generic Copper"},
+            ],
+            "vias": [],
+        }
+
+        script = generate_hfss_script(stackup_data)
+
+        self.assertLess(script.index('"NAME:D1_low"'), script.index('"NAME:L1_high"'))
+        self.assertLess(script.index('"NAME:D1_high"'), script.index('"NAME:L2_low"'))
+
     def test_generated_script_is_valid_python_and_builds_dielectric_boxes(self):
         stackup_data = {
             "layers": [
