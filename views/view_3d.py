@@ -1,6 +1,5 @@
 import streamlit as st
 from core.plotly_engine_3d import build_3d_figure
-from views import view_library
 
 def render():
     st.subheader("3D Exploded View")
@@ -14,8 +13,6 @@ def render():
     if not stackup_data or not stackup_data.get('layers'):
         st.warning("No stack-up data available. Build your layers in the Stack-up Editor first.")
         return
-
-    st.info("📚 Scroll below the 3D chart to find the integrated Material Library and Color Palette Editor.")
 
     with st.spinner("Rendering 3D Mesh..."):
         fig = build_3d_figure(
@@ -41,5 +38,4 @@ def render():
                 f"SVG export is unavailable in this environment because Plotly static export requires `kaleido==0.2.1`. Details: {e}"
             )
 
-    st.divider()
-    view_library.render(show_title=False, show_palette_editor=True, embedded=True)
+    

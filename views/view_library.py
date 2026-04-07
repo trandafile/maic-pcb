@@ -73,22 +73,18 @@ def _render_palette_editor():
 
     st.subheader("🎨 Color Palette Editor")
     st.caption("The global palette is based on four linked slots: `Col#1` metal, `Col#2` dielectric core, `Col#3` prepreg, `Col#4` cover. Custom layer colors remain unchanged.")
+    st.info(f"Active palette for the 2D/3D views: **{current_palette_name}** — change it from the left sidebar.")
 
-    selected_palette_name = st.selectbox(
-        "Active Palette",
+    edit_palette_name = st.selectbox(
+        "Palette to Edit",
         palette_names,
         index=palette_names.index(current_palette_name),
-        key="active_palette_selector",
+        key="palette_editor_target_name",
+        help="This dropdown selects which palette definition you want to edit. It does not change the active 2D/3D palette.",
     )
 
-    if selected_palette_name != current_palette_name:
-        color_manager.set_active_palette(st.session_state, selected_palette_name)
-        color_manager.apply_palette_to_stackup(st.session_state, keep_custom=True)
-        st.toast(f"🎨 Palette switched to {selected_palette_name}")
-        st.rerun()
-
-    active_colors = color_manager.get_active_palette_colors(st.session_state)
-    preset_options = color_manager.build_preset_options(st.session_state)
+    palette_colors = color_manager.get_palette_colors(st.session_state, edit_palette_name)
+    preset_options = color_manager.build_preset_options(st.session_state, palette_name=edit_palette_name)
     edited_colors = {}
 
     col1, col2 = st.columns(2)
@@ -99,8 +95,8 @@ def _render_palette_editor():
             st.caption(f"{preset['name']} · {preset['hex']}")
             edited_colors[preset['role']] = st.color_picker(
                 f"Color {preset['number']}",
-                value=active_colors.get(preset['role'], preset['hex']),
-                key=f"palette_editor_{preset['role']}",
+                value=palette_colors.get(preset['role'], preset['hex']),
+                key=f"palette_editor_{edit_palette_name}_{preset['role']}",
                 label_visibility="collapsed",
             )
 
@@ -108,16 +104,23 @@ def _render_palette_editor():
     with c1:
         if st.button("Apply Palette to Stack-up", use_container_width=True, type="primary", key="apply_palette_to_stackup"):
             for role, color_hex in edited_colors.items():
-                color_manager.update_active_palette_color(st.session_state, role, color_hex)
-            color_manager.apply_palette_to_stackup(st.session_state, keep_custom=True)
-            st.toast("✅ Palette applied to palette-linked layers")
+                color_manager.update_palette_color(st.session_state, edit_palette_name, role, color_hex)
+
+            if edit_palette_name == current_palette_name:
+                color_manager.set_active_palette(st.session_state, current_palette_name)
+                color_manager.apply_palette_to_stackup(st.session_state, keep_custom=True)
+                st.toast("✅ Active palette updated and applied to the stack-up")
+            else:
+                st.toast(f"✅ Saved changes to {edit_palette_name}. Select it in the left sidebar to apply it.")
             st.rerun()
 
     with c2:
         if st.button("Reset Palette Colors", use_container_width=True, type="secondary", key="reset_palette_defaults"):
-            color_manager.set_active_palette(st.session_state, selected_palette_name)
-            color_manager.apply_palette_to_stackup(st.session_state, keep_custom=True)
-            st.toast("↺ Palette reset to its defaults")
+            color_manager.reset_palette_colors(st.session_state, edit_palette_name)
+            if edit_palette_name == current_palette_name:
+                color_manager.set_active_palette(st.session_state, current_palette_name)
+                color_manager.apply_palette_to_stackup(st.session_state, keep_custom=True)
+            st.toast(f"↺ {edit_palette_name} palette reset to its defaults")
             st.rerun()
 
 

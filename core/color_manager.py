@@ -84,30 +84,66 @@ def get_palette_definition(palette_name=None):
     return deepcopy(PALETTES[palette_name])
 
 
-def ensure_palette_state(session_state):
-    if 'active_palette_name' not in session_state:
-        session_state['active_palette_name'] = DEFAULT_PALETTE_NAME
-
-    if 'active_palette_colors' not in session_state:
-        set_active_palette(session_state, session_state['active_palette_name'])
-
-
-def set_active_palette(session_state, palette_name):
-    palette_name = palette_name if palette_name in PALETTES else DEFAULT_PALETTE_NAME
+def _build_palette_color_map(palette_name):
     palette = get_palette_definition(palette_name)
-
-    session_state['active_palette_name'] = palette_name
-    session_state['active_palette_colors'] = {
+    return {
         role: normalize_hex_color(item['hex']) for role, item in palette.items()
     }
 
 
+def ensure_palette_state(session_state):
+    if 'palette_overrides' not in session_state:
+        session_state['palette_overrides'] = {
+            name: _build_palette_color_map(name) for name in PALETTES
+        }
+    else:
+        for name in PALETTES:
+            session_state['palette_overrides'].setdefault(name, _build_palette_color_map(name))
+
+    if 'active_palette_name' not in session_state or session_state['active_palette_name'] not in PALETTES:
+        session_state['active_palette_name'] = DEFAULT_PALETTE_NAME
+
+    session_state['active_palette_colors'] = dict(
+        session_state['palette_overrides'][session_state['active_palette_name']]
+    )
+
+
+def get_palette_colors(session_state, palette_name=None):
+    ensure_palette_state(session_state)
+    palette_name = palette_name if palette_name in PALETTES else session_state['active_palette_name']
+    return dict(session_state['palette_overrides'][palette_name])
+
+
+def set_active_palette(session_state, palette_name):
+    ensure_palette_state(session_state)
+    palette_name = palette_name if palette_name in PALETTES else DEFAULT_PALETTE_NAME
+    session_state['active_palette_name'] = palette_name
+    session_state['active_palette_colors'] = get_palette_colors(session_state, palette_name)
+
+
+def update_palette_color(session_state, palette_name, role, color_hex):
+    ensure_palette_state(session_state)
+    palette_name = palette_name if palette_name in PALETTES else DEFAULT_PALETTE_NAME
+    if role not in session_state['palette_overrides'][palette_name]:
+        return
+    fallback = get_palette_definition(palette_name).get(role, {}).get('hex', '#708090')
+    session_state['palette_overrides'][palette_name][role] = normalize_hex_color(color_hex, fallback=fallback)
+
+    if session_state.get('active_palette_name') == palette_name:
+        session_state['active_palette_colors'] = dict(session_state['palette_overrides'][palette_name])
+
+
 def update_active_palette_color(session_state, role, color_hex):
     ensure_palette_state(session_state)
-    if role not in session_state['active_palette_colors']:
-        return
-    fallback = get_palette_definition(session_state['active_palette_name']).get(role, {}).get('hex', '#708090')
-    session_state['active_palette_colors'][role] = normalize_hex_color(color_hex, fallback=fallback)
+    update_palette_color(session_state, get_active_palette_name(session_state), role, color_hex)
+
+
+def reset_palette_colors(session_state, palette_name=None):
+    ensure_palette_state(session_state)
+    palette_name = palette_name if palette_name in PALETTES else get_active_palette_name(session_state)
+    session_state['palette_overrides'][palette_name] = _build_palette_color_map(palette_name)
+    if session_state.get('active_palette_name') == palette_name:
+        session_state['active_palette_colors'] = dict(session_state['palette_overrides'][palette_name])
 
 
 def get_active_palette_name(session_state):
@@ -137,16 +173,16 @@ def get_role_color(session_state, role):
     return normalize_hex_color(session_state['active_palette_colors'].get(role), fallback=fallback)
 
 
-def build_preset_options(session_state):
+def build_preset_options(session_state, palette_name=None):
     ensure_palette_state(session_state)
-    palette_name = get_active_palette_name(session_state)
+    palette_name = palette_name if palette_name in PALETTES else get_active_palette_name(session_state)
     palette_def = get_palette_definition(palette_name)
-    active_colors = get_active_palette_colors(session_state)
+    palette_colors = get_palette_colors(session_state, palette_name)
 
     preset_options = []
     for role, number, display_name in PALETTE_SLOTS:
         role_info = palette_def[role]
-        hex_value = normalize_hex_color(active_colors.get(role), fallback=role_info['hex'])
+        hex_value = normalize_hex_color(palette_colors.get(role), fallback=role_info['hex'])
         preset_options.append({
             "role": role,
             "number": number,

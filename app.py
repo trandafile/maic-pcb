@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-VIEW_MODES = ['Stack-up Editor', '2D Cross-Section', '3D Exploded View']
+VIEW_MODES = ['Stack-up Editor', '2D Cross-Section', '3D Exploded View', 'Material Library']
 
 
 def init_session_state():
@@ -85,8 +85,6 @@ def init_session_state():
     
     if 'view_mode' not in st.session_state:
         st.session_state['view_mode'] = 'Stack-up Editor'
-    elif st.session_state['view_mode'] == 'Material Library':
-        st.session_state['view_mode'] = '3D Exploded View'
     elif st.session_state['view_mode'] not in VIEW_MODES:
         st.session_state['view_mode'] = 'Stack-up Editor'
 
@@ -118,11 +116,9 @@ def build_sidebar():
         help="Toggle layer name display on the left side."
     )
     
-    st.sidebar.caption("📚 `Material Library` and `Color Palette Editor` are now integrated inside `3D Exploded View`.")
-
     current_view = st.session_state.get('view_mode', 'Stack-up Editor')
     if current_view not in VIEW_MODES:
-        current_view = '3D Exploded View' if current_view == 'Material Library' else 'Stack-up Editor'
+        current_view = 'Stack-up Editor'
 
     st.session_state['view_mode'] = st.sidebar.radio(
         "View Mode",
@@ -140,6 +136,24 @@ def build_sidebar():
         help="Control the separation distance between layers in the 3D view.",
         disabled=(st.session_state['view_mode'] != '3D Exploded View')
     )
+
+    color_manager.ensure_palette_state(st.session_state)
+    palette_names = color_manager.get_palette_names()
+    current_palette_name = color_manager.get_active_palette_name(st.session_state)
+    selected_palette_name = st.sidebar.selectbox(
+        "🎨 Active Palette",
+        options=palette_names,
+        index=palette_names.index(current_palette_name),
+        help="Apply the selected palette to palette-linked layers in both the 2D and 3D views.",
+        key="sidebar_active_palette_selector"
+    )
+
+    if selected_palette_name != current_palette_name:
+        color_manager.set_active_palette(st.session_state, selected_palette_name)
+        color_manager.apply_palette_to_stackup(st.session_state, keep_custom=True)
+        st.toast(f"🎨 Palette switched to {selected_palette_name}")
+
+    st.sidebar.caption("Applies to both `2D Cross-Section` and `3D Exploded View`.")
     
     st.sidebar.divider()
     st.sidebar.subheader("📁 Project I/O")
@@ -232,6 +246,8 @@ def main():
         view_2d.render()
     elif st.session_state['view_mode'] == '3D Exploded View':
         view_3d.render()
+    elif st.session_state['view_mode'] == 'Material Library':
+        view_library.render()
 
 if __name__ == "__main__":
     main()
