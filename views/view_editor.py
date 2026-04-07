@@ -244,51 +244,55 @@ def render():
     st.divider()
 
     # --- 2. ADD / EDIT LAYER FORM ---
-    st.subheader("🛠️ Layer Management")
-    add_tab, edit_tab = st.tabs(["➕ Add New Layer", "✏️ Edit Existing Layer"])
+    st.subheader("🛠️ Add New / Edit Layer")
 
-    with add_tab:
-        st.caption("Add new layers using the current Category ➔ Material ➔ Thickness flow.")
-        new_layer = _render_layer_inputs(
+    st.markdown("### ➕ Add New Layer")
+    st.caption("Add new layers using the current Category ➔ Material ➔ Thickness flow.")
+    new_layer = _render_layer_inputs(
+        df_lib=df_lib,
+        defaults={},
+        key_prefix="add_layer",
+        id_default=f"L{len(layers) + 1}",
+    )
+
+    if st.button("➕ Push Layer to Stack-up", type="primary", width="stretch", key="add_layer_button"):
+        if not new_layer["id"]:
+            st.error("Layer ID is required.")
+        else:
+            st.session_state['stackup_data']['layers'].append(new_layer)
+            st.toast(f"✅ Layer {new_layer['id']} added")
+            st.rerun()
+
+    st.markdown("### ✏️ Edit Existing Layer")
+    if not layers:
+        st.info("Add at least one layer before editing.")
+    else:
+        selected_layer_id = st.selectbox(
+            "Select Layer ID",
+            [layer['id'] for layer in layers],
+            key="edit_layer_selector",
+        )
+        selected_idx = next((i for i, layer in enumerate(layers) if layer['id'] == selected_layer_id), 0)
+        selected_layer = layers[selected_idx]
+
+        st.caption(f"Editing layer: `[{selected_layer.get('id', '?')}] {selected_layer.get('name', 'Unnamed Layer')}`")
+
+        edited_layer = _render_layer_inputs(
             df_lib=df_lib,
-            defaults={},
-            key_prefix="add_layer",
-            id_default=f"L{len(layers) + 1}",
+            defaults=selected_layer,
+            key_prefix="edit_layer",
+            id_default=selected_layer.get("id", f"L{selected_idx + 1}"),
         )
 
-        if st.button("➕ Push Layer to Stack-up", type="primary", width="stretch", key="add_layer_button"):
-            if not new_layer["id"]:
+        if st.button("💾 Update Selected Layer", type="primary", width="stretch", key="edit_layer_button"):
+            if not edited_layer["id"]:
                 st.error("Layer ID is required.")
             else:
-                st.session_state['stackup_data']['layers'].append(new_layer)
-                st.toast(f"✅ Layer {new_layer['id']} added")
+                original_id = selected_layer.get("id")
+                st.session_state['stackup_data']['layers'][selected_idx] = edited_layer
+                _update_via_layer_references(original_id, edited_layer["id"])
+                st.toast(f"✅ Layer {edited_layer['id']} updated")
                 st.rerun()
-
-    with edit_tab:
-        if not layers:
-            st.info("Add at least one layer before editing.")
-        else:
-            layer_labels = [f"[{layer.get('id', '?')}] {layer.get('name', 'Unnamed Layer')}" for layer in layers]
-            selected_label = st.selectbox("Select a layer to edit", layer_labels, key="edit_layer_selector")
-            selected_idx = layer_labels.index(selected_label)
-            selected_layer = layers[selected_idx]
-
-            edited_layer = _render_layer_inputs(
-                df_lib=df_lib,
-                defaults=selected_layer,
-                key_prefix="edit_layer",
-                id_default=selected_layer.get("id", f"L{selected_idx + 1}"),
-            )
-
-            if st.button("💾 Update Selected Layer", type="primary", width="stretch", key="edit_layer_button"):
-                if not edited_layer["id"]:
-                    st.error("Layer ID is required.")
-                else:
-                    original_id = selected_layer.get("id")
-                    st.session_state['stackup_data']['layers'][selected_idx] = edited_layer
-                    _update_via_layer_references(original_id, edited_layer["id"])
-                    st.toast(f"✅ Layer {edited_layer['id']} updated")
-                    st.rerun()
 
     st.divider()
 
