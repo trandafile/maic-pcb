@@ -131,6 +131,13 @@ def generate_css(palette_name="Classic", palette_colors=None):
         z-index: 11;
         transform: translateX(-50%);
     }}
+
+    .via-label-row {{
+        position: relative;
+        width: 100%;
+        height: 40px;
+        margin-top: 8px;
+    }}
     """
     
     # Optional dynamic injections
@@ -192,7 +199,7 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
         <div class="stackup-header">
             <span class="stackup-title">Custom Stack-up Configuration — {total_thickness:.3f}mm</span>
         </div>
-        <div class="stackup-body" style="padding: 0px 0 60px 0;">
+        <div class="stackup-body" style="padding: 0px 0 20px 0;">
     """
     
     # Pre-calculate absolute Y offsets for layers to position vias properly
@@ -243,7 +250,7 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
     # 2. GENERATE VIAS
     via_x_px = 150 # Start X position in px relative to layer-bar container
     via_spacing = 60 # px jump between vias
-    pcb_bottom_y = current_y
+    via_labels_html = ""
     
     for via in vias:
         s_id = via.get('start_layer')
@@ -293,11 +300,16 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
 
             if label_text:
                 label_center_x = via_x_px + (v_width / 2.0)
-                html += f"""
-            <div class="via-bottom-label" style="left:calc(135px + {label_center_x}px); top:{pcb_bottom_y + 8}px;">{label_text}</div>
-                """
+                via_labels_html += f'<div class="via-bottom-label" style="left:calc(135px + {label_center_x}px); top:0px;">{label_text}</div>'
             
             via_x_px += via_spacing
+
+    if via_labels_html:
+        html += f"""
+        <div class="via-label-row">
+            {via_labels_html}
+        </div>
+        """
             
     html += """
         </div>
