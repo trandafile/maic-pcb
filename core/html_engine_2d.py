@@ -56,7 +56,7 @@ def generate_css(palette_name="Classic", palette_colors=None):
     }}
     
     .layer-label {{ width: 120px; text-align: right; padding-right: 15px; font-size: 12px; font-weight: bold; z-index: 2;}}
-    .layer-bar {{ flex: 1; min-width: 300px; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; font-size: 11px; z-index: 1;}}
+    .layer-bar {{ flex: 1; min-width: 300px; height: 100%; position: relative; display: flex; align-items: center; justify-content: flex-start; padding-left: 260px; font-size: 11px; z-index: 1;}}
     .layer-dim {{ width: 70px; text-align: left; padding-left: 15px; font-size: 11px; font-family: monospace; color: #666; z-index: 2;}}
     
     /* Layer Gradients */
@@ -248,7 +248,7 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
     id_to_idx = {m['id']: m['idx'] for m in layer_map}
         
     # 2. GENERATE VIAS
-    via_x_px = 150 # Start X position in px relative to layer-bar container
+    via_x_px = 130 # Start X position in px relative to layer-bar container
     via_spacing = 60 # px jump between vias
     via_labels_html = ""
     
