@@ -161,14 +161,15 @@ def _format_via_label(via, show_id=True, show_name=True):
         via_name = str(via.get('label', '')).strip()
     via_name = via_name.replace("\n", " ")
 
-    parts = []
-    if show_name and via_name:
-        parts.append(via_name)
-    if show_id and via_id:
-        parts.append(via_id)
+    show_name_part = show_name and bool(via_name)
+    show_id_part = show_id and bool(via_id)
 
-    if parts:
-        return " - ".join(parts)
+    if show_name_part and show_id_part:
+        return f"{via_name}<br>{via_id}"
+    if show_name_part:
+        return via_name
+    if show_id_part:
+        return via_id
     return ""
 
 
