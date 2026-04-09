@@ -120,6 +120,17 @@ def generate_css(palette_name="Classic", palette_colors=None):
         white-space: nowrap;
         font-weight: bold;
     }}
+
+    .via-bottom-label {{
+        position: absolute;
+        font-size: 10px;
+        color: #444;
+        text-align: center;
+        white-space: nowrap;
+        font-weight: bold;
+        z-index: 11;
+        transform: translateX(-50%);
+    }}
     """
     
     # Optional dynamic injections
@@ -142,6 +153,25 @@ def _format_layer_label(layer, show_id=True, show_name=True):
     return " - ".join(part for part in [layer_name, layer_id] if part) or "&nbsp;"
 
 
+def _format_via_label(via, show_id=True, show_name=True):
+    """Format a via label using `Via name - ID` when both toggles are enabled."""
+    via_id = str(via.get('id', '')).strip()
+    via_name = str(via.get('name', '')).strip()
+    if not via_name:
+        via_name = str(via.get('label', '')).strip()
+    via_name = via_name.replace("\n", " ")
+
+    parts = []
+    if show_name and via_name:
+        parts.append(via_name)
+    if show_id and via_id:
+        parts.append(via_id)
+
+    if parts:
+        return " - ".join(parts)
+    return ""
+
+
 def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, palette_colors=None):
     """
     Generates the complete HTML string for the PCB visual engine.
@@ -161,7 +191,7 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
         <div class="stackup-header">
             <span class="stackup-title">Custom Stack-up Configuration — {total_thickness:.3f}mm</span>
         </div>
-        <div class="stackup-body" style="padding: 0px 0 30px 0;">
+        <div class="stackup-body" style="padding: 0px 0 60px 0;">
     """
     
     # Pre-calculate absolute Y offsets for layers to position vias properly
@@ -212,13 +242,14 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
     # 2. GENERATE VIAS
     via_x_px = 150 # Start X position in px relative to layer-bar container
     via_spacing = 60 # px jump between vias
+    pcb_bottom_y = current_y
     
     for via in vias:
         s_id = via.get('start_layer')
         e_id = via.get('end_layer')
         v_type = via.get('type', 'PTH').upper()
         drill_um = float(via.get('drill_diameter', 0.15)) * 1000.0
-        label = f"{v_type}<br>{s_id} - {e_id}"
+        label_text = _format_via_label(via, show_id=show_id, show_name=show_name)
         
         s_idx = id_to_idx.get(s_id)
         e_idx = id_to_idx.get(e_id)
@@ -256,9 +287,14 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
                 <div class="via-barrel {extra_css_class}"></div>
                 <div class="via-hole" style="height:100%"></div>
                 {pads_html}
-                <div class="via-label">{label}</div>
             </div>
             """
+
+            if label_text:
+                label_center_x = via_x_px + (v_width / 2.0)
+                html += f"""
+            <div class="via-bottom-label" style="left:calc(135px + {label_center_x}px); top:{pcb_bottom_y + 8}px;">{label_text}</div>
+                """
             
             via_x_px += via_spacing
             

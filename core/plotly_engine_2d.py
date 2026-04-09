@@ -17,6 +17,25 @@ def format_layer_label(layer, show_id=True, show_name=True):
     return " - ".join(part for part in [layer_name, layer_id] if part) or "Layer"
 
 
+def format_via_label(via, show_id=True, show_name=True):
+    """Format a via label using `Via name - ID` when both toggles are enabled."""
+    via_id = str(via.get('id', '')).strip()
+    via_name = str(via.get('name', '')).strip()
+    if not via_name:
+        via_name = str(via.get('label', '')).strip()
+    via_name = via_name.replace("\n", " ")
+
+    parts = []
+    if show_name and via_name:
+        parts.append(via_name)
+    if show_id and via_id:
+        parts.append(via_id)
+
+    if parts:
+        return " - ".join(parts)
+    return ""
+
+
 def calculate_z_map(layers):
     """
     Calculate the top and bottom Y coordinates (depth) for each layer.
@@ -89,9 +108,12 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
     
     fig = go.Figure()
     
-    # Calculate the minimum Y position (bottom of lowest layer) for via labels
-    min_y_pcb = min([z_map[layer['id']]['y_bottom'] for layer in layers]) if layers else 0.0
-    label_y_base = min_y_pcb - 0.3  # Position below the lowest layer
+    # Anchor via labels below L1 when present; otherwise below the lowest layer.
+    if layers and 'L1' in z_map:
+        label_y_base = z_map['L1']['y_bottom'] - 0.3
+    else:
+        min_y_pcb = min([z_map[layer['id']]['y_bottom'] for layer in layers]) if layers else 0.0
+        label_y_base = min_y_pcb - 0.3
     
     # --- 1. DRAW LAYERS ---
     for idx, layer in enumerate(layers):
@@ -254,17 +276,8 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
 
         # Add via label(s) at the base of PCB
         if show_id or show_name:
-            via_id = str(via.get('id', '')).strip()
-            via_name = str(via.get('name', '')).strip()
-            
-            label_parts = []
-            if show_name and via_name:
-                label_parts.append(via_name)
-            if show_id and via_id:
-                label_parts.append(via_id)
-            
-            if label_parts:
-                via_label_text = " - ".join(label_parts)
+            via_label_text = format_via_label(via, show_id=show_id, show_name=show_name)
+            if via_label_text:
                 fig.add_annotation(
                     x=x_pos,
                     y=label_y_base,
