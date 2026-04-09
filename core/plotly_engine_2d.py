@@ -89,6 +89,10 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
     
     fig = go.Figure()
     
+    # Calculate the minimum Y position (bottom of lowest layer) for via labels
+    min_y_pcb = min([z_map[layer['id']]['y_bottom'] for layer in layers]) if layers else 0.0
+    label_y_base = min_y_pcb - 0.3  # Position below the lowest layer
+    
     # --- 1. DRAW LAYERS ---
     for idx, layer in enumerate(layers):
         lid = layer['id']
@@ -248,16 +252,29 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
             showlegend=False
         ))
 
+        # Add via label(s) at the base of PCB
         if show_id or show_name:
-            fig.add_annotation(
-                x=x_pos,
-                y=true_top_y + (abs(true_top_y)*0.02 + 0.1),
-                text=f"{via['id']}",
-                showarrow=False,
-                textangle=0,
-                xanchor="center",
-                yanchor="bottom"
-            )
+            via_id = str(via.get('id', '')).strip()
+            via_name = str(via.get('name', '')).strip()
+            
+            label_parts = []
+            if show_name and via_name:
+                label_parts.append(via_name)
+            if show_id and via_id:
+                label_parts.append(via_id)
+            
+            if label_parts:
+                via_label_text = " - ".join(label_parts)
+                fig.add_annotation(
+                    x=x_pos,
+                    y=label_y_base,
+                    text=via_label_text,
+                    showarrow=False,
+                    textangle=0,
+                    xanchor="center",
+                    yanchor="top",
+                    font=dict(size=11, color="#333333")
+                )
 
     fig.update_xaxes(showgrid=False, zeroline=False, visible=False, range=[x_min - 2, x_max + 2])
     # Remove horizontal thickness grid lines as requested

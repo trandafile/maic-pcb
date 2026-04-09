@@ -67,6 +67,7 @@ def init_session_state():
             "vias": [
                 {
                     "id": "VIA_TH_1",
+                    "name": "PTH L2-L1",
                     "type": "PTH",
                     "start_layer": "L2",
                     "end_layer": "L1",
