@@ -38,7 +38,11 @@ def render():
         show_name=show_name,
         palette_colors=palette_colors,
     )
-    components.html(html_out, height=800, scrolling=True)
+    components.html(
+        html_out,
+        height=max(400, html_engine_2d.estimate_height(stackup_data, show_id=show_id, show_name=show_name)),
+        scrolling=True,
+    )
 
     st.divider()
     from core import svg_engine_2d
