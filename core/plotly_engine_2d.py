@@ -1,5 +1,7 @@
 import plotly.graph_objects as go
 
+from core.layer_utils import is_metal_layer
+
 
 def format_layer_label(layer, show_id=True, show_name=True):
     """Format a layer label using the requested `Layer name - ID` ordering."""
@@ -125,7 +127,7 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
         
         # Calculate horizontal segments (Antipads gap)
         antipad_x_gaps = []
-        if layer['type'] == 'metal':
+        if is_metal_layer(layer):
             for v_idx, via in enumerate(vias):
                 x_pos = via_x_positions[v_idx]
                 intersect_type = get_intersection(idx, via, lid_idx_map)
@@ -157,11 +159,11 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
         if current_pos < x_max:
             segments.append((current_pos, x_max))
             
-        color = layer.get('color_hex') 
+        color = layer.get('color_hex')
         if not color:
-             color = '#D67D3E' if layer['type'] == 'metal' else '#708090'
-             
-        opacity = 1.0 if layer['type'] == 'metal' else 0.85
+             color = '#D67D3E' if is_metal_layer(layer) else '#708090'
+
+        opacity = 1.0 if is_metal_layer(layer) else 0.85
         
         for seg in segments:
             fig.add_shape(

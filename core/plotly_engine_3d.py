@@ -1,6 +1,8 @@
 import plotly.graph_objects as go
 import numpy as np
 
+from core.layer_utils import is_metal_layer
+
 
 def format_layer_label(layer, show_id=True, show_name=True):
     """Format a layer label using the requested `Layer name - ID` ordering."""
@@ -47,7 +49,7 @@ def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True
         layer_z_coords[layer['id']] = {"z_top": z_top, "z_bottom": z_bottom}
         
         # Determine Color Map
-        if l_type == 'metal' or l_type == 'copper':
+        if is_metal_layer(layer):
             color = layer.get('color_hex') or '#CC5500' # Strict Orange Palette
             opacity = 1.0 # Opaque metal
         else:

@@ -27,9 +27,10 @@ def init_session_state():
     metal_color = color_manager.get_role_color(st.session_state, 'metal')
     core_color = color_manager.get_role_color(st.session_state, 'core')
 
-    # Dummy JSON-like stack-up data dictionary (2 metal layers, 1 dielectric core, 1 through-hole via)
-    # NOTE: Layers are ordered TOP-DOWN in the list (index 0 = top), but IDs are numbered BOTTOM-UP
-    # So L1 = Bottom Copper, D1 = Core, L2 = Top Copper
+    # Default stack-up (2 metal layers, 1 dielectric core, 1 through-hole via).
+    # NOTE: layers are stored TOP-DOWN (index 0 = top of the stack). Layer IDs
+    # are arbitrary labels NOT tied to list position: here index 0 is L2 (top
+    # copper) and index 2 is L1 (bottom copper).
     if 'stackup_data' not in st.session_state:
         st.session_state['stackup_data'] = {
             "layers": [
@@ -184,9 +185,20 @@ def build_sidebar():
              try:
                  data = json.loads(uploaded_file.getvalue().decode('utf-8'))
                  if "layers" in data and "vias" in data:
-                     st.session_state['stackup_data'] = data
-                     st.sidebar.success("Project Imported!")
-                     st.rerun()
+                     layer_ids = [layer.get('id') for layer in data['layers']]
+                     duplicate_ids = sorted({i for i in layer_ids if layer_ids.count(i) > 1})
+                     if duplicate_ids:
+                         st.sidebar.error(f"Invalid project: duplicate layer IDs {duplicate_ids}. Layer IDs must be unique.")
+                     else:
+                         dangling_vias = [
+                             via.get('id', '?') for via in data.get('vias', [])
+                             if via.get('start_layer') not in layer_ids or via.get('end_layer') not in layer_ids
+                         ]
+                         if dangling_vias:
+                             st.sidebar.warning(f"Vias referencing missing layers (won't render): {dangling_vias}")
+                         st.session_state['stackup_data'] = data
+                         st.sidebar.success("Project Imported!")
+                         st.rerun()
                  else:
                      st.sidebar.error("Invalid Format")
              except Exception as e:

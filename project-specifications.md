@@ -33,7 +33,7 @@ Il singolo progetto di stack-up è descritto da due entità principali.
 
 ### 4.2. Vias
 * `id`: Nome univoco (es. "VIA_L1_L2").
-* `type`: "mechanical" (cilindrico) o "laser" (conico/a V).
+* `type`: uno tra `PTH` (through-hole meccanico), `BLIND_TOP` / `BLIND_BOT` (blind, laser), `BURIED` (interno), `UVIA` (laser microvia, conico/a V), `STACKED` (microvia impilati). [Sostituisce la vecchia dicotomia "mechanical"/"laser".]
 * `start_layer`: ID del layer superiore di partenza.
 * `end_layer`: ID del layer inferiore di arrivo.
 * `drill_diameter`: Diametro del foro.

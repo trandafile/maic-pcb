@@ -6,6 +6,20 @@ import streamlit as st
 
 from core import color_manager, hfss_exporter
 
+# Spec section 4.2 via fields with the same defaults the renderers fall back to
+# (plotly_engine_2d / svg_engine_2d). Keeping them editable here means the user
+# intent survives the JSON roundtrip instead of being silently dropped.
+VIA_FIELD_DEFAULTS = {
+    "drill_diameter": 0.3,
+    "pad_diameter": 0.0,
+    "antipad_diameter": 0.8,
+    "plating_thickness": 0.025,
+    "fill_type": "empty",
+    "label": "",
+}
+VIA_FILL_TYPES = ["empty", "epoxy", "copper_plated"]
+VIA_COLUMN_ORDER = ["id", "type", "start_layer", "end_layer"] + list(VIA_FIELD_DEFAULTS)
+
 
 def _normalize_text(value):
     return str(value or "").strip().lower()
@@ -207,11 +221,12 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
         else:
             thickness_val = st.number_input(
                 "3. Thickness (mm)",
-                min_value=0.0,
-                value=float(defaults.get("thickness", 0.0) or 0.0),
+                min_value=0.001,
+                value=max(float(defaults.get("thickness", 0.0) or 0.0), 0.001),
                 step=0.01,
                 format="%.3f",
                 key=f"{key_prefix}_thickness_manual",
+                help="Zero-thickness layers would collapse the Z-coordinate calculation.",
             )
 
     final_type = _resolve_layer_type(cat_gui, selected_row or {})
@@ -282,6 +297,59 @@ def _render_layer_inputs(df_lib, defaults, key_prefix, id_default):
     }
 
 
+def _vias_referencing_layer(layer_id):
+    """Vias that use the given layer as start or end (spec section 5)."""
+    return [
+        via for via in st.session_state['stackup_data'].get('vias', [])
+        if via.get('start_layer') == layer_id or via.get('end_layer') == layer_id
+    ]
+
+
+def _sanitize_vias(records, valid_layer_ids):
+    """Validate the via table before saving: unique non-empty IDs, start/end
+    referencing existing layers, numeric fields coerced with renderer-matching
+    defaults (NaN cells from the data editor are normalized away)."""
+    cleaned = []
+    errors = []
+    seen_ids = set()
+
+    for row in records:
+        via = {key: value for key, value in row.items() if not pd.isna(value)}
+
+        via_id = str(via.get('id') or "").strip()
+        if not via_id:
+            errors.append("Every via needs a non-empty ID.")
+            continue
+        if via_id in seen_ids:
+            errors.append(f"Duplicate via ID '{via_id}': IDs must be unique.")
+            continue
+        seen_ids.add(via_id)
+        via['id'] = via_id
+
+        start = via.get('start_layer')
+        end = via.get('end_layer')
+        if start not in valid_layer_ids or end not in valid_layer_ids:
+            errors.append(f"Via '{via_id}': start/end must reference existing layer IDs.")
+            continue
+        if start == end:
+            errors.append(f"Via '{via_id}': start and end layer cannot be the same.")
+            continue
+
+        for field in ("drill_diameter", "pad_diameter", "antipad_diameter", "plating_thickness"):
+            try:
+                via[field] = float(via.get(field, VIA_FIELD_DEFAULTS[field]))
+            except (TypeError, ValueError):
+                via[field] = VIA_FIELD_DEFAULTS[field]
+
+        if via.get('fill_type') not in VIA_FILL_TYPES:
+            via['fill_type'] = VIA_FIELD_DEFAULTS['fill_type']
+        via.setdefault('label', VIA_FIELD_DEFAULTS['label'])
+
+        cleaned.append(via)
+
+    return cleaned, errors
+
+
 def _update_via_layer_references(old_id, new_id):
     if old_id == new_id:
         return
@@ -329,8 +397,11 @@ def render():
     )
 
     if st.button("➕ Push Layer to Stack-up", type="primary", width="stretch", key="add_layer_button"):
+        existing_ids = {layer.get('id') for layer in layers}
         if not new_layer["id"]:
             st.error("Layer ID is required.")
+        elif new_layer["id"] in existing_ids:
+            st.error(f"Layer ID '{new_layer['id']}' already exists: IDs must be unique (vias reference layers by ID).")
         else:
             st.session_state['stackup_data']['layers'].insert(0, new_layer)
             st.toast(f"✅ Layer {new_layer['id']} added on top of stack")
@@ -359,8 +430,11 @@ def render():
         )
 
         if st.button("💾 Update Selected Layer", type="primary", width="stretch", key="edit_layer_button"):
+            other_ids = {layer.get('id') for i, layer in enumerate(layers) if i != selected_idx}
             if not edited_layer["id"]:
                 st.error("Layer ID is required.")
+            elif edited_layer["id"] in other_ids:
+                st.error(f"Layer ID '{edited_layer['id']}' already exists: IDs must be unique (vias reference layers by ID).")
             else:
                 original_id = selected_layer.get("id")
                 st.session_state['stackup_data']['layers'][selected_idx] = edited_layer
@@ -406,8 +480,16 @@ def render():
         with c4:
             st.write("")
             if st.button("🗑️ Delete Form", type="primary", width="stretch"):
-                st.session_state['stackup_data']['layers'].pop(idx)
-                st.rerun()
+                blocking_vias = _vias_referencing_layer(sel_move_id)
+                if blocking_vias:
+                    via_ids = ", ".join(str(v.get('id', '?')) for v in blocking_vias)
+                    st.error(
+                        f"Cannot delete layer '{sel_move_id}': it is the start/end layer of via(s) {via_ids}. "
+                        "Delete or re-route those vias first (spec section 5)."
+                    )
+                else:
+                    st.session_state['stackup_data']['layers'].pop(idx)
+                    st.rerun()
 
     st.divider()
 
@@ -416,9 +498,17 @@ def render():
     st.markdown("You can define vias by specifying Start and End layers directly.")
 
     vias = st.session_state['stackup_data']['vias']
-    df_vias = pd.DataFrame(vias) if vias else pd.DataFrame(columns=[
-        'id', 'type', 'start_layer', 'end_layer', 'drill_diameter', 'label'
-    ])
+    df_vias = pd.DataFrame(vias) if vias else pd.DataFrame(columns=VIA_COLUMN_ORDER)
+
+    # Older projects may miss the spec 4.2 fields: surface them with the same
+    # defaults the renderers would silently apply, so they become editable.
+    for column, default in VIA_FIELD_DEFAULTS.items():
+        if column not in df_vias.columns:
+            df_vias[column] = default
+        else:
+            df_vias[column] = df_vias[column].fillna(default)
+    extra_columns = [c for c in df_vias.columns if c not in VIA_COLUMN_ORDER]
+    df_vias = df_vias[VIA_COLUMN_ORDER + extra_columns]
 
     layer_ids = df_layers['id'].dropna().tolist() if not df_layers.empty else []
 
@@ -431,6 +521,10 @@ def render():
             "start_layer": st.column_config.SelectboxColumn("Start Layer", options=layer_ids, required=True),
             "end_layer": st.column_config.SelectboxColumn("End Layer", options=layer_ids, required=True),
             "drill_diameter": st.column_config.NumberColumn("Drill (mm)", min_value=0.01, format="%.3f"),
+            "pad_diameter": st.column_config.NumberColumn("Pad (mm)", min_value=0.0, format="%.3f", help="Pad diameter on connected layers (0 = no pad)."),
+            "antipad_diameter": st.column_config.NumberColumn("Antipad (mm)", min_value=0.0, format="%.3f", help="Clearance hole on crossed-but-unconnected metal layers."),
+            "plating_thickness": st.column_config.NumberColumn("Plating (mm)", min_value=0.0, format="%.3f", help="Copper thickness on the barrel walls."),
+            "fill_type": st.column_config.SelectboxColumn("Fill", options=VIA_FILL_TYPES, help="empty (hollow), epoxy (resin filled), copper_plated (solid copper)."),
             "label": st.column_config.TextColumn("Display Label")
         },
         key="vias_editor_state",
@@ -438,6 +532,14 @@ def render():
     )
 
     if st.button("💾 Apply Via Table Settings"):
-        st.session_state['stackup_data']['vias'] = edited_df_vias.to_dict('records')
-        st.toast("✅ Vias Saved!")
-        st.rerun()
+        cleaned_vias, via_errors = _sanitize_vias(
+            edited_df_vias.to_dict('records'),
+            set(layer_ids),
+        )
+        if via_errors:
+            for message in via_errors:
+                st.error(message)
+        else:
+            st.session_state['stackup_data']['vias'] = cleaned_vias
+            st.toast("✅ Vias Saved!")
+            st.rerun()
