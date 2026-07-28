@@ -1,5 +1,6 @@
 import plotly.graph_objects as go
 
+from core import via_utils
 from core.layer_utils import is_metal_layer
 
 
@@ -59,24 +60,11 @@ def calculate_z_map(layers):
 
 def get_intersection(layer_idx, via, layer_idx_shape_map):
     """
-    Determine how the via intersects the given layer.
-    Returns: 'connected', 'unconnected', or None
+    Determine how the via intersects the given layer, taking any back-drill
+    into account.
+    Returns: 'connected', 'unconnected', 'backdrilled', or None
     """
-    if via['start_layer'] not in layer_idx_shape_map or via['end_layer'] not in layer_idx_shape_map:
-        return None
-        
-    idx1 = layer_idx_shape_map[via['start_layer']]
-    idx2 = layer_idx_shape_map[via['end_layer']]
-    
-    start_idx = min(idx1, idx2)
-    end_idx = max(idx1, idx2)
-    
-    if layer_idx == start_idx or layer_idx == end_idx:
-        return 'connected'
-    elif start_idx < layer_idx < end_idx:
-        return 'unconnected'
-    else:
-        return None
+    return via_utils.classify_layer(layer_idx, via_utils.resolve(via, layer_idx_shape_map))
 
 def build_2d_figure(stackup_data, show_id=True, show_name=True):
     """
@@ -88,24 +76,26 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
     
     z_map = calculate_z_map(layers)
     lid_idx_map = {lid: z['index'] for lid, z in z_map.items()}
-    
+    idx_lid_map = {z['index']: lid for lid, z in z_map.items()}
+    layer_ids = [layer.get('id') for layer in layers]
+
+    # Back-drill geometry is resolved once and reused by the layer-clearance
+    # pass and by the via-drawing pass (None = via references missing layers).
+    via_geoms = [via_utils.resolve(via, lid_idx_map) for via in vias]
+
     # Calculate intelligent X-spacing for vias based on their maximum requested diameters
-    # so they never touch.
+    # (back-drill bore included) so they never touch.
     via_x_positions = []
     current_x = 0.0
-    for via in vias:
-        drill_r = float(via.get('drill_diameter', 0.3)) / 2.0
-        pad_r = float(via.get('pad_diameter', 0.0)) / 2.0
-        antipad_r = float(via.get('antipad_diameter', 0.8)) / 2.0
-        
-        max_r = max(drill_r, pad_r, antipad_r)
-        
+    for via, geom in zip(vias, via_geoms):
+        max_r = via_utils.max_radius(via, geom)
+
         # Add left buffer
-        current_x += max_r + 2.0  
+        current_x += max_r + 2.0
         via_x_positions.append(current_x)
         # Add right buffer
         current_x += max_r
-        
+
     x_min = -2.0
     x_max = current_x + 2.0 if vias else 10.0
     
@@ -130,12 +120,15 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
         if is_metal_layer(layer):
             for v_idx, via in enumerate(vias):
                 x_pos = via_x_positions[v_idx]
-                intersect_type = get_intersection(idx, via, lid_idx_map)
-                
-                if intersect_type == 'unconnected':
-                    ap = float(via.get('antipad_diameter', 0.8))
+                geom = via_geoms[v_idx]
+                intersect_type = via_utils.classify_layer(idx, geom)
+
+                # 'backdrilled' layers lose their copper over the (larger)
+                # back-drill diameter, not over the antipad one.
+                if intersect_type in ('unconnected', 'backdrilled'):
+                    ap = via_utils.clearance_diameter(via, geom, intersect_type, layer_idx=idx)
                     antipad_x_gaps.append((x_pos - ap/2.0, x_pos + ap/2.0))
-        
+
         antipad_x_gaps.sort(key=lambda x: x[0])
         
         merged_gaps = []
@@ -221,21 +214,53 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
     # --- 2. DRAW VIAS ---
     for v_idx, via in enumerate(vias):
         x_pos = via_x_positions[v_idx]
-        
-        if via['start_layer'] not in z_map or via['end_layer'] not in z_map:
+        geom = via_geoms[v_idx]
+
+        if geom is None:
             continue
-            
-        via_y_top = z_map[via['start_layer']]['y_top']
-        via_y_bottom = z_map[via['end_layer']]['y_bottom']
-        
-        true_top_y = max(via_y_top, via_y_bottom)
-        true_bot_y = min(via_y_top, via_y_bottom)
-        
+
+        nominal_top_y = z_map[idx_lid_map[geom['top_idx']]]['y_top']
+        nominal_bot_y = z_map[idx_lid_map[geom['bot_idx']]]['y_bottom']
+
+        # Back-drill shortens the live barrel: it stops `stub` mm before the
+        # stop layer, on whichever side(s) are drilled.
+        true_top_y = nominal_top_y
+        true_bot_y = nominal_bot_y
+        stub = geom['stub']
+
+        if geom['bd_top_idx'] is not None:
+            stop_y_top = z_map[idx_lid_map[geom['bd_top_idx']]]['y_top']
+            true_top_y = min(nominal_top_y, stop_y_top + stub)
+        if geom['bd_bot_idx'] is not None:
+            stop_y_bottom = z_map[idx_lid_map[geom['bd_bot_idx']]]['y_bottom']
+            true_bot_y = max(nominal_bot_y, stop_y_bottom - stub)
+
         drill_r = float(via.get('drill_diameter', 0.3)) / 2.0
         plating = float(via.get('plating_thickness', 0.025))
-        
-        wall_color = "#B87333" 
-        
+
+        wall_color = "#B87333"
+
+        # Removed sections: the back-drill bore, drawn hollow/dashed so the
+        # user sees where the stub used to be.
+        if geom['has_backdrill']:
+            bd_r = geom['bd_diameter'] / 2.0
+            removed_spans = []
+            if true_top_y < nominal_top_y:
+                removed_spans.append((true_top_y, nominal_top_y))
+            if true_bot_y > nominal_bot_y:
+                removed_spans.append((nominal_bot_y, true_bot_y))
+
+            for span_bot, span_top in removed_spans:
+                fig.add_shape(
+                    type="rect",
+                    x0=x_pos - bd_r, x1=x_pos + bd_r,
+                    y0=span_bot, y1=span_top,
+                    fillcolor="#FFFFFF",
+                    line=dict(color="#8A8A8A", width=1, dash="dot"),
+                    layer="above",
+                    opacity=0.9
+                )
+
         # Left wall
         fig.add_shape(
             type="rect",
@@ -267,13 +292,17 @@ def build_2d_figure(stackup_data, show_id=True, show_name=True):
                 opacity=inner_opacity
             )
             
+        hover_extra = via_utils.describe(via, geom, layer_ids)
         fig.add_trace(go.Scatter(
             x=[x_pos],
             y=[true_bot_y + (true_top_y - true_bot_y)/2],
             mode="markers",
             marker=dict(size=float(via.get('drill_diameter', 0.3))*40, opacity=0),
             hoverinfo="text",
-            text=f"<b>Via: {via['id']}</b><br>Drill: {via.get('drill_diameter',0)}mm",
+            text=(
+                f"<b>Via: {via['id']}</b><br>Drill: {via.get('drill_diameter',0)}mm"
+                + (f"<br>{hover_extra}" if hover_extra else "")
+            ),
             showlegend=False
         ))
 

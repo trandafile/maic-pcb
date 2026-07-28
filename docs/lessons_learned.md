@@ -37,6 +37,13 @@
 * **Solution:** Use an `add_local_variable(name, value)` helper that checks `oDesign.GetVariables()`, updates existing variables with `oDesign.SetVariableValue(...)`, and creates them only if missing.
 * **Rule:** In AEDT export scripts, local variables should be emitted in create-or-update form, and dielectric references must be defined before metal variables that depend on them.
 
+## Back-drill Geometry Must Be Shared, Not Duplicated (Date: 2026-07-28)
+* **Issue:** Four independent engines (`plotly_engine_2d`, `plotly_engine_3d`, `html_engine_2d`, `svg_engine_2d`) each recomputed the via span from `start_layer`/`end_layer`. Adding back-drill there would have meant four subtly different geometries.
+* **Solution:** `core/via_utils.py` resolves the span ONCE in **layer-index space** (`top_idx`/`bot_idx` + `eff_top_idx`/`eff_bot_idx`) and each engine converts to its own units. The stub stays in mm for the mm-based engines; the schematic px engines use `BACKDRILL_STUB_PX` because their thickness→px mapping is non-linear and non-invertible.
+* **Rule:** When a via property affects more than one renderer, put the geometry in `core/via_utils.py` and let the engines convert coordinates only. Never re-derive the span inline.
+* **Rule:** New via fields must be OPTIONAL with inert defaults (`backdrill_side` missing == `"none"`), and a regression test must prove a pre-feature project renders with zero new markup. See `test_backdrill.py::TestBackwardCompatibility`.
+* **Rule:** Invalid back-drill data (stop layer out of span, crossing back-drills) is IGNORED by the renderers and REJECTED by the editor. A half-edited project must still draw instead of raising.
+
 ## Shared Palette HTML/CSS Rendering (Date: 2026-04-07)
 * **Issue:** Converting a CSS template to an f-string caused a runtime `NameError` because literal CSS braces were interpreted as Python expressions.
 * **Solution:** Escape CSS blocks with double braces `{{ ... }}` and inject only the actual palette values from `color_manager.build_render_palette(...)`.

@@ -1,6 +1,7 @@
 import os
 import ast
 from core import color_manager
+from core import via_utils
 
 def layer_height_px(thickness_um: float, layer_type: str) -> int:
     """
@@ -118,7 +119,17 @@ def generate_css(palette_name="Classic", palette_colors=None):
     .uvia-barrel {{
         clip-path: polygon(25% 0, 75% 0, 100% 100%, 0 100%);
     }}
-    
+
+    /* Back-drill: the bore that removed the stub. Drawn hollow with a dashed
+       outline so the missing barrel section stays readable over the layers. */
+    .via-backdrill {{
+        position: absolute;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px dashed #8A8A8A;
+        box-sizing: border-box;
+        z-index: 9;
+    }}
+
     .via-label {{
         position: absolute;
         bottom: -25px;
@@ -236,6 +247,22 @@ def _format_via_label(via, show_id=True, show_name=True):
     return ""
 
 
+def _via_width_px(drill_mm) -> float:
+    """Schematic barrel width (px) derived from the drill diameter."""
+    try:
+        drill_um = float(drill_mm) * 1000.0
+    except (TypeError, ValueError):
+        drill_um = 150.0
+    return max(8.0, min(24.0, drill_um / 15.0))
+
+
+def _backdrill_width_px(v_width, via, geom) -> float:
+    """Bore width (px) of the back-drill: always visibly wider than the barrel."""
+    drill = float(via.get('drill_diameter', 0.15) or 0.15)
+    ratio = geom['bd_diameter'] / drill if drill > 0 else 1.5
+    return max(v_width + 4.0, min(v_width * 2.2, v_width * ratio))
+
+
 def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, palette_colors=None):
     """
     Generates the complete HTML string for the PCB visual engine.
@@ -258,6 +285,19 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
         v for v in vias
         if v.get('start_layer') in id_set and v.get('end_layer') in id_set
     ]
+    # Back-drill geometry resolved once; indices refer to the top-down list.
+    id_to_idx_early = {l.get('id'): i for i, l in enumerate(layers)}
+    via_geoms = [via_utils.resolve(v, id_to_idx_early) for v in drawable_vias]
+
+    # Back-drilled vias occupy a wider bore: widen the pitch so they never touch.
+    max_via_width = 0.0
+    for v, geom in zip(drawable_vias, via_geoms):
+        w = _via_width_px(v.get('drill_diameter', 0.15))
+        if geom is not None and geom['has_backdrill']:
+            w = _backdrill_width_px(w, v, geom)
+        max_via_width = max(max_via_width, w)
+    via_spacing = max(via_spacing, max_via_width + 24.0)
+
     n_vias = len(drawable_vias)
     corridor_end = via_x_start + n_vias * via_spacing if n_vias else via_x_start
     bar_min_width = corridor_end + 80
@@ -324,53 +364,83 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
             </div>
         """
         
-    id_to_idx = {m['id']: m['idx'] for m in layer_map}
-        
     # 2. GENERATE VIAS — drawn in the dedicated corridor right of the
     # material text; labels rotated 45 deg below, with a thin leader tick.
     stack_bottom_y = current_y
     via_x_px = via_x_start
     via_labels_html = ""
 
-    for via in drawable_vias:
-        s_id = via.get('start_layer')
-        e_id = via.get('end_layer')
+    layer_ids = [l.get('id') for l in layers]
+
+    for via, geom in zip(drawable_vias, via_geoms):
         v_type = via.get('type', 'PTH').upper()
-        drill_um = float(via.get('drill_diameter', 0.15)) * 1000.0
         label_text = _format_via_label(via, show_id=show_id, show_name=show_name)
 
-        s_idx = id_to_idx[s_id]
-        e_idx = id_to_idx[e_id]
+        top_idx = geom['top_idx']
+        bot_idx = geom['bot_idx']
 
-        top_idx = min(s_idx, e_idx)
-        bot_idx = max(s_idx, e_idx)
+        # Nominal (as-drilled) extent, before any back-drill.
+        nominal_top_y = layer_map[top_idx]['y_top']
+        nominal_bot_y = layer_map[bot_idx]['y_bot']
 
-        top_y = layer_map[top_idx]['y_top']
-        bot_y = layer_map[bot_idx]['y_bot']
+        # Live extent: the back-drill stops BACKDRILL_STUB_PX before the stop
+        # layer, which stays connected.
+        live_top_idx = geom['eff_top_idx']
+        live_bot_idx = geom['eff_bot_idx']
+        top_y = nominal_top_y
+        bot_y = nominal_bot_y
+        if geom['bd_top_idx'] is not None:
+            top_y = max(nominal_top_y, layer_map[live_top_idx]['y_top'] - via_utils.BACKDRILL_STUB_PX)
+        if geom['bd_bot_idx'] is not None:
+            bot_y = min(nominal_bot_y, layer_map[live_bot_idx]['y_bot'] + via_utils.BACKDRILL_STUB_PX)
 
-        via_height = bot_y - top_y
+        via_height = max(1.0, bot_y - top_y)
 
         # Dimension scaling
-        v_width = max(8, min(24, drill_um / 15)) # Proportional mapping px length
+        v_width = _via_width_px(via.get('drill_diameter', 0.15))
 
         extra_css_class = "uvia-barrel" if v_type == "UVIA" else ""
 
-        # Determine Pad Visibility (Loop through intersected layers)
+        # Determine Pad Visibility: only the layers the LIVE barrel reaches
+        # keep a pad; back-drilled layers lost their copper to the bore.
         pads_html = ""
-        for l_idx in range(top_idx, bot_idx + 1):
+        for l_idx in range(live_top_idx, live_bot_idx + 1):
             lyr = layer_map[l_idx]
             if lyr['type'] == 'copper':
-                if l_idx == top_idx:
-                    pad_y = -2.0 # Top edge of via (top layer)
-                elif l_idx == bot_idx:
-                    pad_y = via_height - 2.0 # Bottom edge of via (bottom layer)
+                if l_idx == live_bot_idx:
+                    pad_y = lyr['y_bot'] - top_y - 2.0  # Bottom edge of the last connected layer
                 else:
-                    pad_y = lyr['y_top'] - top_y - 2.0 # Top edge of intersection for internal pads
+                    pad_y = lyr['y_top'] - top_y - 2.0  # Top edge of the intersection
 
                 pads_html += f'<div class="via-pad" style="top:{pad_y}px"></div>\n                '
 
+        # Back-drill bore(s): the removed sections of the barrel.
+        backdrill_html = ""
+        if geom['has_backdrill']:
+            bd_width = _backdrill_width_px(v_width, via, geom)
+            bd_left = via_x_px + (v_width - bd_width) / 2.0
+            bd_title = via_utils.describe(via, geom, layer_ids)
+            removed_spans = []
+            if top_y > nominal_top_y:
+                removed_spans.append((nominal_top_y, top_y))
+            if bot_y < nominal_bot_y:
+                removed_spans.append((bot_y, nominal_bot_y))
+
+            for span_top, span_bot in removed_spans:
+                backdrill_html += (
+                    f'<div class="via-backdrill" title="{bd_title}" '
+                    f'style="left:calc({bar_left}px + {bd_left:.1f}px); top:{span_top:.1f}px; '
+                    f'height:{max(1.0, span_bot - span_top):.1f}px; width:{bd_width:.1f}px;"></div>\n            '
+                )
+
+        zone_title = label_text
+        bd_description = via_utils.describe(via, geom, layer_ids)
+        if bd_description:
+            zone_title = f"{label_text} — {bd_description}" if label_text else bd_description
+
         html += f"""
-            <div class="via-zone" title="{label_text}" style="left:calc({bar_left}px + {via_x_px}px); top:{top_y}px; height:{via_height}px; width:{v_width}px;">
+            {backdrill_html}
+            <div class="via-zone" title="{zone_title}" style="left:calc({bar_left}px + {via_x_px}px); top:{top_y}px; height:{via_height}px; width:{v_width}px;">
                 <div class="via-barrel {extra_css_class}"></div>
                 <div class="via-hole" style="height:100%"></div>
                 {pads_html}
@@ -379,8 +449,9 @@ def render_html(stackup_data, palette="Classic", show_id=True, show_name=True, p
 
         if label_text:
             label_center_x = via_x_px + (v_width / 2.0)
-            # Leader tick from the via barrel down into the label band.
-            leader_h = stack_bottom_y - bot_y + 10
+            # Leader tick from the via footprint (nominal, back-drill bore
+            # included) down into the label band.
+            leader_h = stack_bottom_y - nominal_bot_y + 10
             via_labels_html += (
                 f'<div class="via-leader" style="left:calc({bar_left}px + {label_center_x}px); '
                 f'top:-{leader_h}px; height:{leader_h + 4}px;"></div>'

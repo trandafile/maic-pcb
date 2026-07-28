@@ -42,6 +42,25 @@ Il singolo progetto di stack-up è descritto da due entità principali.
 * `plating_thickness`: Spessore del rame sulle pareti del foro.
 * `fill_type`: "empty" (vuoto), "epoxy" (resina), "copper_plated" (pieno di rame).
 
+### 4.3. Back-drill (opzionale, associato a un Via)
+Il back-drill è una seconda foratura, di diametro maggiore, eseguita **dopo la metallizzazione**: asporta la porzione inutilizzata della canna (lo **stub**), riducendo la lunghezza elettrica del via. È descritto da campi **opzionali** sull'entità Via: un progetto salvato senza questi campi resta valido e viene renderizzato esattamente come prima (`backdrill_side` assente equivale a `"none"`).
+
+* `backdrill_side`: `"none"` (default, nessun back-drill), `"top"`, `"bottom"`, `"both"`. Indica il lato (o i lati) da cui entra la punta.
+* `backdrill_top_layer`: **layer di stop** per la foratura dal lato superiore, cioè l'**ultimo layer che deve restare CONNESSO**. Deve trovarsi dentro la campata del via e sotto il layer di partenza.
+* `backdrill_bottom_layer`: layer di stop per la foratura dal lato inferiore (stessa convenzione, sopra il layer di arrivo).
+* `backdrill_diameter`: diametro della punta di back-drill in mm. Deve essere maggiore di `drill_diameter`. Il valore `0` (default) attiva il **dimensionamento automatico**: `drill_diameter + 0.2 mm`.
+* `backdrill_stub`: lunghezza residua di canna (mm) lasciata fra la fine della foratura e il layer di stop (default `0.1`).
+
+**Semantica geometrica.** Con `side = "bottom"` e `backdrill_bottom_layer = "L4"`, la canna viva va dal layer di partenza fino a `backdrill_stub` mm **oltre** il bordo inferiore di L4; tutto ciò che sta sotto è asportato. L4 resta connesso e mantiene la sua piazzola. Un layer che ricade nella sezione asportata perde il contatto con il via: se in origine era attraversato (antipad) la sua apertura diventa il maggiore fra antipad e diametro di back-drill; se in origine era un layer di atterraggio (piazzola) l'apertura è pari al solo diametro di back-drill.
+
+**Vincoli di validazione** (applicati dall'editor dei via):
+* Il layer di stop deve esistere e cadere dentro la campata del via, dal lato corretto.
+* Con `side = "both"` i due back-drill non possono incrociarsi (lo stop superiore non può stare sotto quello inferiore).
+* Un diametro esplicito non maggiore di `drill_diameter` viene rifiutato.
+* Uno stop su layer non metallico produce solo un avviso, non un errore.
+
+**Nota HFSS.** Il back-drill è una definizione puramente geometrica del via: **non ha alcun impatto sullo stack-up esportato verso HFSS** (`core/hfss_exporter.py` non ne tiene conto).
+
 ## 5. Logiche di Manipolazione dello Stack-up
 L'interfaccia deve consentire modifiche dinamiche all'ordine dei layer, preservando l'integrità del progetto:
 * **Aggiunta Layer:** Possibilità di inserire un nuovo strato in posizioni intermedie (non solo alla fine).
@@ -64,6 +83,7 @@ L'applicazione include un gestore di colori con palette predefinite studiate per
 * **Sidebar/Top Bar:** Toggles per mostrare/nascondere etichette quote (spessori dielettrici a destra, spessori metalli a sinistra), nomi dei layer editabili e quote dei via.
 * **Vista 2D (Cross-Section):** Layout planare tramite Plotly. Asse Y per lo spessore, Asse X discreto per distanziare i via. I metalli sono continui ma interrotti dagli `antipad_diameter` se attraversati da via non connessi.
 * **Vista 3D (Esplosa):** Layout spaziale tramite Plotly Graph Objects. Layer renderizzati come `Mesh3d` (dielettrici semi-trasparenti, metalli opachi). Via renderizzati come cilindri/coni.
+* **Back-drill:** in tutti i motori la canna viva è disegnata solo sulla porzione residua del via; la sezione asportata è resa come alesatura vuota di diametro maggiore (tratteggio grigio in 2D, cilindro grigio semi-trasparente in 3D), così da restare leggibile sopra i layer.
 * **Slider Esplosione 3D:** Controllo che regola parametricamente la distanza (offset Z) tra i layer. A `0` lo stack-up è compatto; aumentando il valore, i layer si separano rivelando la struttura dei via.
 
 ### 7.2. Importazione ed Esportazione

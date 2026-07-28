@@ -1,6 +1,7 @@
 import plotly.graph_objects as go
 import numpy as np
 
+from core import via_utils
 from core.layer_utils import is_metal_layer
 
 
@@ -90,36 +91,78 @@ def build_3d_figure(stackup_data, explosion_factor, show_id=True, show_name=True
     # Draw Vias
     # Using cylinders (Mesh3d) is graphically heavier than Scatter3d.
     # To represent realistic 3D tubes, we map circles to Mesh3d.
+    id_to_idx = {layer.get('id'): idx for idx, layer in enumerate(layers)}
+    idx_to_id = {idx: layer.get('id') for idx, layer in enumerate(layers)}
+    layer_ids = [layer.get('id') for layer in layers]
+
+    def _cylinder(vx, radius, z_low, z_high):
+        """Cylinder surface grid centred on (vx, length/2)."""
+        theta = np.linspace(0, 2 * np.pi, 20)
+        z_line = np.linspace(z_low, z_high, 2)
+        theta_grid, z_grid = np.meshgrid(theta, z_line)
+        return (
+            vx + radius * np.cos(theta_grid),
+            (length / 2) + radius * np.sin(theta_grid),
+            z_grid,
+        )
+
     for i, via in enumerate(vias):
-        s_layer = via.get('start_layer')
-        e_layer = via.get('end_layer')
         drill = float(via.get('drill_diameter', 0.3))
-        
-        if s_layer in layer_z_coords and e_layer in layer_z_coords:
-            z_top = layer_z_coords[s_layer]['z_top']
-            z_bottom = layer_z_coords[e_layer]['z_bottom']
-            
+        geom = via_utils.resolve(via, id_to_idx)
+
+        if geom is not None:
+            nominal_top = layer_z_coords[idx_to_id[geom['top_idx']]]['z_top']
+            nominal_bottom = layer_z_coords[idx_to_id[geom['bot_idx']]]['z_bottom']
+
+            # A back-drill removes the stub: the live barrel stops `stub` mm
+            # before the stop layer, which stays connected.
+            z_top = nominal_top
+            z_bottom = nominal_bottom
+            stub = geom['stub']
+            if geom['bd_top_idx'] is not None:
+                stop_top = layer_z_coords[idx_to_id[geom['bd_top_idx']]]['z_top']
+                z_top = min(nominal_top, stop_top + stub)
+            if geom['bd_bot_idx'] is not None:
+                stop_bottom = layer_z_coords[idx_to_id[geom['bd_bot_idx']]]['z_bottom']
+                z_bottom = max(nominal_bottom, stop_bottom - stub)
+
             # Place vias uniformly along the X axis
             vx = 2.0 + (i * 1.5)
             if vx > width - 1: vx = width / 2.0
-            
-            # Math to generate cylinder points
-            theta = np.linspace(0, 2*np.pi, 20)
-            z_grid = np.linspace(z_bottom, z_top, 2)
-            theta_grid, z_grid = np.meshgrid(theta, z_grid)
-            r = drill / 2.0
-            x_grid = vx + r * np.cos(theta_grid)
-            y_grid = (length / 2) + r * np.sin(theta_grid)
-            
+
+            x_grid, y_grid, z_grid = _cylinder(vx, drill / 2.0, z_bottom, z_top)
+
+            hover_extra = via_utils.describe(via, geom, layer_ids)
             fig.add_trace(go.Surface(
                 x=x_grid, y=y_grid, z=z_grid,
                 colorscale=[[0, '#B87333'], [1, '#B87333']], # Copper plating
                 showscale=False,
                 opacity=1.0,
                 name=via.get('id', 'Via'),
-                hoverinfo="name"
+                hoverinfo="name+text",
+                hovertext=hover_extra.replace("&rarr;", "→").replace("&#8960;", "⌀") if hover_extra else ""
             ))
-            
+
+            # Back-drill bore: wider, translucent, over the removed section(s).
+            if geom['has_backdrill']:
+                bd_r = geom['bd_diameter'] / 2.0
+                removed_spans = []
+                if z_top < nominal_top:
+                    removed_spans.append((z_top, nominal_top))
+                if z_bottom > nominal_bottom:
+                    removed_spans.append((nominal_bottom, z_bottom))
+
+                for span_low, span_high in removed_spans:
+                    bx, by, bz = _cylinder(vx, bd_r, span_low, span_high)
+                    fig.add_trace(go.Surface(
+                        x=bx, y=by, z=bz,
+                        colorscale=[[0, '#9AA0A6'], [1, '#9AA0A6']],  # Removed copper
+                        showscale=False,
+                        opacity=0.30,
+                        name=f"{via.get('id', 'Via')} back-drill",
+                        hoverinfo="name"
+                    ))
+
     # Side annotations: left labels and right thicknesses aligned in vertical columns
     annotations = []
     total_layers = max(len(side_labels), 1)
